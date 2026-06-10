@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チェイスのパウパト・アクション（修正版）</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            font-family: sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: #87CEEB;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// ==========================================
+// 🎵 1. オーディオ（音素材）の設定
+// ==========================================
+const bgm = new Audio("audio/bgm.mp3"); bgm.loop = true;
+const seJump = new Audio("audio/jump.mp3");
+const seItem = new Audio("audio/item.mp3");
+const seHit = new Audio("audio/hit.mp3");
+const seClear = new Audio("audio/clear.mp3");
+const voiceStart = new Audio("audio/voice_start.mp3");
+const voiceClear = new Audio("audio/voice_clear.mp3");
+
+// ==========================================
+// 🖼️ 2. グラフィック（画像素材）の設定
+// ==========================================
+const bgImg = new Image(); bgImg.src = "images/background.png";
+const goalImg = new Image(); goalImg.src = "images/paw_station.png";
+const itemImg = new Image(); itemImg.src = "images/cookie.png";
+
+const chaseFrames = [new Image(), new Image(), new Image()];
+chaseFrames[0].src = "images/chase_run1.png";
+chaseFrames[1].src = "images/chase_run2.png";
+chaseFrames[2].src = "images/chase_jump.png";
+
+// 障害物の画像（5種類）のパス
+const obstacleTypes = [
+    { src: "images/cat.png", width: 45, height: 40, color: "#FFA500", name: "ねこ" }, // ニャンパト
+    { src: "images/puddle.png", width: 60, height: 15, color: "#4169E1", name: "みずたまり" },
+    { src: "images/box.png", width: 40, height: 40, color: "#8B4513", name: "きばこ" },
+    { src: "images/car.png", width: 70, height: 40, color: "#333333", name: "くるま" },
+    { src: "images/cone.png", width: 30, height: 40, color: "#FF4500", name: "コーン" }
+];
+obstacleTypes.forEach(obs => {
+    obs.img = new Image();
+    obs.img.src = obs.src;
+});
+
+// ==========================================
+// 🎮 3. ゲームデータと変数
+// ==========================================
+let score = 0;
+let isCleared = false;
+let gameStarted = false;
+let animeFrame = 0;
+
+const groundY = 340;
+
+const chase = {
+    x: 100, y: 300, width: 50, height: 50,
+    vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: true
+};
+
+let currentObs = getRandomObstacle();
+const item = { x: 600, y: 220, width: 30, height: 30, isCollected: false };
+const goal = { x: 2500, y: 140, width: 120, height: 200, speed: 5 };
+
+function getRandomObstacle() {
+    const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+    return {
+        x: 900,
+        y: groundY - type.height,
+        width: type.width,
+        height: type.height,
+        img: type.img,
+        color: type.color,
+        name: type.name,
+        speed: 5
+    };
+}
+
+// 安全に音を鳴らす関数（ファイルがなくてもエラーで止まらないようにする）
+function playSound(audio) {
+    audio.currentTime = 0;
+    audio.play().catch(() => { /* ファイルがない場合は無視 */ });
+}
+
+// ==========================================
+// 🕹️ 4. 操作（ジャンプ・スタート）
+// ==========================================
+function handleInput() {
+    if (!gameStarted) {
+        gameStarted = true;
+        playSound(bgm);
+        playSound(voiceStart);
+        gameLoop();
+        return;
+    }
+    if (chase.isGrounded && !isCleared) {
+        chase.vy = chase.jumpPower;
+        chase.isGrounded = false;
+        playSound(seJump);
+    }
+}
+window.addEventListener("keydown", (e) => { if (e.code === "Space") handleInput(); });
+window.addEventListener("touchstart", handleInput);
+
+// ==========================================
+// 🔄 5. メインゲームループ
+// ==========================================
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    animeFrame++;
+
+    // --- 背景の描画 ---
+    if (bgImg.complete && bgImg.width > 0) {
+        ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+    } else {
+        // 画像がないときは水色の空と緑の地面を描く
+        ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#228B22"; ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+    }
+
+    if (!isCleared) {
+        // チェイスの物理演算
+        chase.vy += chase.gravity; chase.y += chase.vy;
+        if (chase.y >= groundY - chase.height) {
+            chase.y = groundY - chase.height; chase.vy = 0; chase.isGrounded = true;
+        }
+
+        // 移動（オートラン）
+        currentObs.x -= currentObs.speed;
+        if (!item.isCollected) item.x -= 5;
+        goal.x -= goal.speed;
+
+        // 障害物が画面外に出たら新しい種類で復活
+        if (currentObs.x < -currentObs.width) currentObs = getRandomObstacle();
+        
+        // アイテム復活
+        if (item.x < -30) { item.x = 800 + Math.random() * 400; item.isCollected = false; }
+
+        // 当たり判定：障害物（当たったら消えて次が出る）
+        if (chase.x < currentObs.x + currentObs.width && chase.x + chase.width > currentObs.x &&
+            chase.y < currentObs.y + currentObs.height && chase.y + chase.height > currentObs.y) {
+            playSound(seHit);
+            currentObs = getRandomObstacle(); 
+        }
+
+        // 当たり判定：アイテム
+        if (!item.isCollected &&
+            chase.x < item.x + item.width && chase.x + chase.width > item.x &&
+            chase.y < item.y + item.height && chase.y + chase.height > item.y) {
+            item.isCollected = true; score += 1;
+            playSound(seItem);
+        }
+
+        // ゴール判定
+        if (chase.x > goal.x + 30) {
+            isCleared = true;
+            bgm.pause();
+            playSound(seClear);
+            playSound(voiceClear);
+        }
+    }
+
+    // --- 各種描画（画像があれば画像、なければ仮の図形） ---
+    
+    // ① ゴール（パウステーション）
+    if (goalImg.complete && goalImg.width > 0) {
+        ctx.drawImage(goalImg, goal.x, goal.y, goal.width, goal.height);
+    } else {
+        ctx.fillStyle = "#1E3A8A"; ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "14px sans-serif";
+        ctx.fillText("ゴール", goal.x + 20, goal.y + 30);
+    }
+
+    // ② アイテム（ほねクッキー）
+    if (!item.isCollected) {
+        if (itemImg.complete && itemImg.width > 0) {
+            ctx.drawImage(itemImg, item.x, item.y, item.width, item.height);
+        } else {
+            ctx.fillStyle = "#FBBF24"; // 黄色の丸
+            ctx.beginPath(); ctx.arc(item.x + item.width/2, item.y + item.height/2, item.width/2, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    // ③ 障害物（ランダムに色と形が変わる）
+    if (currentObs.img && currentObs.img.complete && currentObs.img.width > 0) {
+        ctx.drawImage(currentObs.img, currentObs.x, currentObs.y, currentObs.width, currentObs.height);
+    } else {
+        ctx.fillStyle = currentObs.color;
+        ctx.fillRect(currentObs.x, currentObs.y, currentObs.width, currentObs.height);
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "12px sans-serif";
+        ctx.fillText(currentObs.name, currentObs.x, currentObs.y - 5);
+    }
+
+    // ④ 主人公チェイス
+    let currentChaseImg = chaseFrames[0];
+    if (!chase.isGrounded) {
+        currentChaseImg = chaseFrames[2]; // ジャンプ中
+    } else {
+        currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2]; // 走りアニメ
+    }
+
+    if (currentChaseImg.complete && currentChaseImg.width > 0) {
+        ctx.drawImage(currentChaseImg, chase.x, chase.y, chase.width, chase.height);
+    } else {
+        ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height); // 青い四角
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "12px sans-serif"; ctx.fillText("チェイス", chase.x, chase.y - 5);
+    }
+
+    // スコア表示
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText("ほねクッキー: " + score, 20, 40);
+
+    // --- クリア画面 ---
+    if (isCleared) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#FFFF00"; ctx.font = "bold 50px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("パウフェクト！", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "24px sans-serif";
+        ctx.fillText("チェイス「パウ・パック、てんかい！」", canvas.width / 2, canvas.height / 2 + 40);
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// 最初の画面表示（クリック待ち）
+ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
+ctx.fillText("画面をタッチして パウ・パトロール 出動！", canvas.width / 2, canvas.height / 2);
+</script>
+
+</body>
+</html>
