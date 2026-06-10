@@ -1,158 +1,10 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（リトライ機能付き）</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #222;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            width: 100vw;
-            font-family: sans-serif;
-            overflow: hidden;
-            position: relative;
-        }
-        canvas {
-            background-color: #87CEEB;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-        .menu-container {
-            position: absolute;
-            display: flex;
-            gap: 20px;
-            top: 60%;
-        }
-        .mode-btn {
-            padding: 15px 30px;
-            font-size: 20px;
-            font-weight: bold;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            box-shadow: 0 4px 0 #999;
-            transition: 0.1s;
-        }
-        .mode-btn:active {
-            transform: translateY(4px);
-            box-shadow: none;
-        }
-        #easyBtn { background-color: #4ADE80; color: white; box-shadow: 0 4px 0 #166534; }
-        #hardBtn { background-color: #F87171; color: white; box-shadow: 0 4px 0 #991B1B; }
-    </style>
-</head>
-<body>
-
-<div class="menu-container" id="menuContainer">
-    <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん（0さい〜）</button>
-    <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい（ライフ3つ）</button>
-</div>
-
-<canvas id="gameCanvas" width="800" height="400"></canvas>
-
-<script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-
-// ==========================================
-// 🎵 1. オーディオ設定
-// ==========================================
-const bgm = new Audio("audio/bgm.mp3"); bgm.loop = true;
-const seJump = new Audio("audio/jump.mp3");
-const seItem = new Audio("audio/item.mp3");
-const seHit = new Audio("audio/hit.mp3");
-const seClear = new Audio("audio/clear.mp3");
-const seGameOver = new Audio("audio/gameover.mp3");
-const voiceStart = new Audio("audio/voice_start.mp3");
-const voiceClear = new Audio("audio/voice_clear.mp3");
-
-// ==========================================
-// 🖼️ 2. グラフィック設定
-// ==========================================
-const bgImg = new Image(); bgImg.src = "images/background.png";
-const goalImg = new Image(); goalImg.src = "images/paw_station.png";
-const itemImg = new Image(); itemImg.src = "images/cookie.png";
-
-const chaseFrames = [new Image(), new Image(), new Image()];
-chaseFrames[0].src = "images/chase_run1.png";
-chaseFrames[1].src = "images/chase_run2.png";
-chaseFrames[2].src = "images/chase_jump.png";
-
-const obstacleTypes = [
-    { src: "images/cat.png", width: 45, height: 40, color: "#FFA500", name: "ねこ" },
-    { src: "images/puddle.png", width: 60, height: 15, color: "#4169E1", name: "みずたまり" },
-    { src: "images/box.png", width: 40, height: 40, color: "#8B4513", name: "きばこ" },
-    { src: "images/car.png", width: 70, height: 40, color: "#333333", name: "くるま" },
-    { src: "images/cone.png", width: 30, height: 40, color: "#FF4500", name: "コーン" }
-];
-obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
-
-// ==========================================
-// 🎮 3. ゲームデータと変数
-// ==========================================
-let score;
-let isCleared;
-let isGameOver;
-let gameStarted = false;
-let animeFrame = 0;
-let gameMode = 'easy';
-let lives;
-
-const groundY = 340;
-
-const chase = {
-    x: 100, y: 300, width: 50, height: 50,
-    vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: true
-};
-
-let currentObs;
-let item = { x: 600, y: 220, width: 30, height: 30, isCollected: false };
-let goal = { x: 2500, y: 140, width: 120, height: 200, speed: 5 };
-
-// データを初期状態にリセットする関数（新しく追加）
-function initGame() {
-    score = 0;
-    isCleared = false;
-    isGameOver = false;
-    lives = 3;
-    chase.y = groundY - chase.height;
-    chase.vy = 0;
-    chase.isGrounded = true;
-    currentObs = getRandomObstacle();
-    item.x = 600;
-    item.y = 220;
-    item.isCollected = false;
-    goal.x = 2500; // ゴール位置をもとに戻す
-}
-
-function getRandomObstacle() {
-    const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
-    return {
-        x: 900, y: groundY - type.height, width: type.width, height: type.height,
-        img: type.img, color: type.color, name: type.name, speed: 5
-    };
-}
-
-function playSound(audio) {
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
-}
-
 // ==========================================
 // 🕹️ 4. 操作・ゲーム開始とリトライ
 // ==========================================
 function startGame(mode) {
     if (gameStarted) return;
     
-    initGame(); // ゲームデータをリセット
+    initGame();
     gameMode = mode;
     gameStarted = true;
     
@@ -163,171 +15,38 @@ function startGame(mode) {
     gameLoop();
 }
 
-// クリア時・ゲームオーバー時に画面を叩いてタイトルに戻る関数（新しく追加）
-function backToTitle() {
-    gameStarted = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // タイトル画面の文字を再描画
-    drawTitleScreen();
-    
-    // モード選択ボタンを再表示
-    document.getElementById("menuContainer").style.display = "flex";
-}
-
-function handleTap() {
-    if (!gameStarted) return;
-    
-    // クリアまたはゲームオーバーなら、タップでタイトルに戻る
-    if (isCleared || isGameOver) {
-        backToTitle();
-        return;
-    }
-    
-    // プレイ中ならジャンプ
-    if (chase.isGrounded) {
+// ジャンプ処理（共通化）
+function performJump() {
+    if (gameStarted && !isCleared && !isGameOver && chase.isGrounded) {
         chase.vy = chase.jumpPower;
         chase.isGrounded = false;
         playSound(seJump);
     }
 }
 
-window.addEventListener("keydown", (e) => { if (e.code === "Space") handleTap(); });
-window.addEventListener("touchstart", handleTap);
-
-// ==========================================
-// 🔄 5. メインゲームループ
-// ==========================================
-function gameLoop() {
-    if (!gameStarted) return; // タイトルに戻ったらループを止める
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    animeFrame++;
-
-    // 背景の描画
-    if (bgImg.complete && bgImg.width > 0) {
-        ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+// タイトル画面に戻る処理（共通化）
+function handleInteraction() {
+    if (!gameStarted) return;
+    if (isCleared || isGameOver) {
+        backToTitle();
     } else {
-        ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#228B22"; ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
-    }
-
-    if (!isCleared && !isGameOver) {
-        // チェイスの物理演算
-        chase.vy += chase.gravity; chase.y += chase.vy;
-        if (chase.y >= groundY - chase.height) {
-            chase.y = groundY - chase.height; chase.vy = 0; chase.isGrounded = true;
-        }
-
-        // 移動
-        currentObs.x -= currentObs.speed;
-        if (!item.isCollected) item.x -= 5;
-        goal.x -= goal.speed;
-
-        if (currentObs.x < -currentObs.width) currentObs = getRandomObstacle();
-        if (item.x < -30) { item.x = 800 + Math.random() * 400; item.isCollected = false; }
-
-        // 当たり判定：障害物
-        if (chase.x < currentObs.x + currentObs.width && chase.x + chase.width > currentObs.x &&
-            chase.y < currentObs.y + currentObs.height && chase.y + chase.height > currentObs.y) {
-            
-            playSound(seHit);
-            
-            if (gameMode === 'hard') {
-                lives--;
-                if (lives <= 0) {
-                    isGameOver = true;
-                    bgm.pause();
-                    playSound(seGameOver);
-                }
-            }
-            currentObs = getRandomObstacle();
-        }
-
-        // 当たり判定：アイテム
-        if (!item.isCollected &&
-            chase.x < item.x + item.width && chase.x + chase.width > item.x &&
-            chase.y < item.y + item.height && chase.y + chase.height > item.y) {
-            item.isCollected = true; score += 1;
-            playSound(seItem);
-        }
-
-        // ゴール判定
-        if (chase.x > goal.x + 30) {
-            isCleared = true;
-            bgm.pause();
-            playSound(seClear);
-            playSound(voiceClear);
-        }
-    }
-
-    // --- 描画処理 ---
-    if (goalImg.complete && goalImg.width > 0) ctx.drawImage(goalImg, goal.x, goal.y, goal.width, goal.height);
-    else { ctx.fillStyle = "#1E3A8A"; ctx.fillRect(goal.x, goal.y, goal.width, goal.height); }
-
-    if (!item.isCollected) {
-        if (itemImg.complete && itemImg.width > 0) ctx.drawImage(itemImg, item.x, item.y, item.width, item.height);
-        else { ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(item.x + 15, item.y + 15, 15, 0, Math.PI * 2); ctx.fill(); }
-    }
-
-    if (currentObs.img && currentObs.img.complete && currentObs.img.width > 0) {
-        ctx.drawImage(currentObs.img, currentObs.x, currentObs.y, currentObs.width, currentObs.height);
-    } else {
-        ctx.fillStyle = currentObs.color; ctx.fillRect(currentObs.x, currentObs.y, currentObs.width, currentObs.height);
-    }
-
-    let currentChaseImg = chaseFrames[0];
-    if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
-    else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
-
-    if (currentChaseImg.complete && currentChaseImg.width > 0) {
-        ctx.drawImage(currentChaseImg, chase.x, chase.y, chase.width, chase.height);
-    } else {
-        ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height);
-    }
-
-    let statusText = "ほねクッキー: " + score;
-    if (gameMode === 'hard') statusText += "  ❤️×" + lives;
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
-    ctx.fillText(statusText, 20, 40);
-
-    // --- クリア画面 ---
-    if (isCleared) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#FFFF00"; ctx.font = "bold 50px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("パウフェクト！", canvas.width / 2, canvas.height / 2 - 40);
-        ctx.fillStyle = "#FFFFFF"; ctx.font = "24px sans-serif";
-        ctx.fillText("チェイス「パウ・パック、てんかい！」", canvas.width / 2, canvas.height / 2 + 10);
-        ctx.fillStyle = "#AAA"; ctx.font = "18px sans-serif";
-        ctx.fillText("【 がめんを タッチして タイトルに もどる 】", canvas.width / 2, canvas.height / 2 + 70);
-    } 
-    // --- ゲームオーバー画面 ---
-    else if (isGameOver) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#FF3333"; ctx.font = "bold 40px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("パウっと 解決ならず…！", canvas.width / 2, canvas.height / 2 - 40);
-        ctx.fillStyle = "#FFFFFF"; ctx.font = "20px sans-serif";
-        ctx.fillText("もういっかい ちょうせん しよう！", canvas.width / 2, canvas.height / 2 + 10);
-        ctx.fillStyle = "#AAA"; ctx.font = "18px sans-serif";
-        ctx.fillText("【 がめんを タッチして タイトルに もどる 】", canvas.width / 2, canvas.height / 2 + 70);
-    } else {
-        requestAnimationFrame(gameLoop);
+        performJump();
     }
 }
 
-// 最初とリトライ時にタイトル画面を描画する関数
-function drawTitleScreen() {
-    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#228B22"; ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, canvas.height / 2 - 60);
-    ctx.font = "18px sans-serif";
-    ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
-}
+// ▼キーボードイベント
+window.addEventListener("keydown", (e) => {
+    // スペースキー または 十字キーの↑
+    if (e.code === "Space" || e.code === "ArrowUp") {
+        if (!gameStarted) return; // スタート前は無反応にする
+        if (isCleared || isGameOver) {
+            backToTitle();
+        } else {
+            performJump();
+        }
+    }
+});
 
-// 初期起動
-drawTitleScreen();
-</script>
-
-</body>
-</html>
+// ▼マウス/タッチイベント
+window.addEventListener("mousedown", handleInteraction);
+window.addEventListener("touchstart", handleInteraction);
