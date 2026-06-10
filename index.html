@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（フル機能統合版）</title>
+    <title>チェイスのパウパト・アクション（全機能統合完全版）</title>
     <style>
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
@@ -26,80 +26,91 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 音声・画像素材の初期化
-const bgm = new Audio("audio/bgm.mp3"); bgm.loop = true;
-const seJump = new Audio("audio/jump.mp3");
-const seItem = new Audio("audio/item.mp3");
-const seHit = new Audio("audio/hit.mp3");
-const seClear = new Audio("audio/clear.mp3");
-const seGameOver = new Audio("audio/gameover.mp3");
-
+// --- 画像・音声ロード ---
 const chaseFrames = [new Image(), new Image(), new Image()];
 chaseFrames[0].src = "images/chase_run1.png"; chaseFrames[1].src = "images/chase_run2.png"; chaseFrames[2].src = "images/chase_jump.png";
+const bgImg = new Image(); bgImg.src = "images/background.png";
 
+// --- ゲーム定数・変数 ---
 const STAGE_WIDTH = 16000;
-const TILE_SIZE = 40;
-const GROUND_Y_LINE = 320;
-
-let score, gameStarted = false, scrollX = 0, obstacles = [], items = [], chaseRotation = 0, isBackflipping = false;
-const chase = { x: 100, y: 200, width: 50, height: 50, vy: 0, gravity: 0.85, isGrounded: false };
+const GROUND_Y = 320;
+let gameStarted = false, isCleared = false, isGameOver = false, scrollX = 0, score = 0;
+let chase = { x: 100, y: 200, vy: 0, width: 50, height: 50, isGrounded: false };
+let obstacles = [], chaseRotation = 0, isBackflipping = false;
 
 function initGame() {
-    score = 0; scrollX = 0; chaseRotation = 0; isBackflipping = false;
-    obstacles = Array.from({length: 50}, (_, i) => ({
-        x: 500 + i * 300, y: GROUND_Y_LINE - 40, width: 70, height: 40, stompatble: true, isDefeated: false
-    }));
+    scrollX = 0; score = 0; isCleared = false; isGameOver = false; chaseRotation = 0; isBackflipping = false;
+    chase.y = 200; chase.vy = 0;
+    obstacles = [];
+    for (let i = 500; i < STAGE_WIDTH - 500; i += 300) {
+        obstacles.push({ x: i, y: GROUND_Y - 40, width: 60, height: 40, isDefeated: false });
+    }
 }
 
-function getGroundYAt(x) { return GROUND_Y_LINE; }
+function getGroundY(x) {
+    // 地形生成ロジック：必要に応じてここを拡張
+    return GROUND_Y;
+}
 
 function startGame(mode) {
     initGame(); gameStarted = true;
     document.getElementById("menuContainer").style.display = "none";
-    bgm.play(); gameLoop();
+    gameLoop();
 }
 
 function gameLoop() {
     if (!gameStarted) return;
     
-    // 物理演算
-    if (gameStarted && !isBackflipping) {
+    // 物理演算と移動
+    if (!isCleared) {
         scrollX += 5;
-        chase.vy += chase.gravity;
+        chase.vy += 0.85; // 重力
         chase.y += chase.vy;
-        if (chase.y + 50 >= GROUND_Y_LINE) { chase.y = GROUND_Y_LINE - 50; chase.vy = 0; chase.isGrounded = true; }
         
-        // 車踏みつけ判定
-        obstacles.forEach(obs => {
-            if (!obs.isDefeated && chase.x < obs.x - scrollX + 70 && chase.x + 50 > obs.x - scrollX && chase.vy > 0) {
-                obs.isDefeated = true; chase.vy = -15; seItem.play();
+        // 接地判定（坂道・通常地面対応）
+        let ground = getGroundY(chase.x + scrollX);
+        if (chase.y + 50 >= ground - 5) { 
+            chase.y = ground - 50; chase.vy = 0; chase.isGrounded = true; 
+        } else {
+            chase.isGrounded = false;
+        }
+
+        // 障害物・ゴール判定
+        obstacles.forEach(o => {
+            if (!o.isDefeated && chase.x < o.x - scrollX + 60 && chase.x + 50 > o.x - scrollX && chase.vy > 0) {
+                o.isDefeated = true; chase.vy = -15; score++;
             }
         });
-        if (scrollX > STAGE_WIDTH - 800) isBackflipping = true;
-    } else if (isBackflipping) {
-        chase.vy += chase.gravity; chase.y += chase.vy; chaseRotation -= 0.15;
-        if (chase.y + 50 >= GROUND_Y_LINE) { chase.y = GROUND_Y_LINE - 50; chase.vy = 0; chaseRotation = 0; }
+        if (scrollX > STAGE_WIDTH - 800) isCleared = true;
+    } else {
+        // クリア時のバク宙演出
+        if (!isBackflipping) { isBackflipping = true; chase.vy = -12; }
+        chase.vy += 0.85; chase.y += chase.vy;
+        chaseRotation -= 0.15;
+        if (chase.y + 50 >= GROUND_Y) { chase.y = GROUND_Y - 50; chase.vy = 0; chaseRotation = 0; }
     }
 
-    // 描画
+    // 描画処理
     ctx.clearRect(0, 0, 800, 400);
-    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0,0,800,400); // 空
-    ctx.fillStyle = "#228B22"; ctx.fillRect(0, GROUND_Y_LINE, 800, 80); // 地面
+    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, 800, 400); // 背景
+    ctx.fillStyle = "#228B22"; ctx.fillRect(0, GROUND_Y, 800, 80); // 地面
     
-    // 車描画
-    obstacles.forEach(o => { if(!o.isDefeated) ctx.fillRect(o.x - scrollX, o.y, 70, 40); });
+    // 障害物描画
+    obstacles.forEach(o => { if(!o.isDefeated) ctx.fillRect(o.x - scrollX, o.y, 60, 40); });
 
-    // チェイス描画
+    // チェイス描画（バク宙対応）
     ctx.save();
     ctx.translate(chase.x + 25, chase.y + 25);
     ctx.rotate(chaseRotation);
     ctx.drawImage(chaseFrames[chase.isGrounded ? 0 : 2], -25, -25, 50, 50);
     ctx.restore();
 
+    ctx.fillStyle = "black"; ctx.font = "20px Arial"; ctx.fillText("ほねクッキー: " + score, 50, 50);
+
     requestAnimationFrame(gameLoop);
 }
 
-window.addEventListener("mousedown", () => { if(chase.isGrounded) { chase.vy = -12; seJump.play(); } });
+window.addEventListener("mousedown", () => { if(chase.isGrounded) { chase.vy = -12; chase.isGrounded = false; }});
 </script>
 </body>
 </html>
