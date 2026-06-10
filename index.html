@@ -3,52 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（スマホ完全対応版）</title>
+    <title>チェイスのパウパト・アクション（疑似3D修正版）</title>
     <style>
-        /* 画面全体の無駄な隙間やスクロールを徹底的に排除 */
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
-        body { 
-            margin: 0; 
-            padding: 0;
-            background: #222; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            width: 100vw;
-            overflow: hidden; 
-            position: relative;
-            touch-action: none; /* スマホのダブルタップズームなどを防止 */
-        }
-        /* ゲーム画面を常に真ん中に配置し、はみ出さないように自動拡縮 */
-        canvas { 
-            background-color: #87CEEB; 
-            box-shadow: 0 4px 8px rgba(0,0,0,0.5); 
-            max-width: 100%; 
-            max-height: 100%; 
-            object-fit: contain; /* 比率を維持したまま画面いっぱいに広げる */
-        }
-        /* ボタンの位置を画面の比率に合わせて調整しやすく */
-        .menu-container { 
-            position: absolute; 
-            display: flex; 
-            gap: 20px; 
-            top: 65%; 
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-        }
-        .mode-btn { 
-            padding: 12px 24px; 
-            font-size: 18px; 
-            font-weight: bold; 
-            border: none; 
-            border-radius: 10px; 
-            cursor: pointer; 
-            box-shadow: 0 4px 0 #999; 
-            transition: 0.1s; 
-            white-space: nowrap;
-        }
+        body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
+        canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
+        .menu-container { position: absolute; display: flex; gap: 20px; top: 65%; left: 50%; transform: translateX(-50%); z-index: 10; }
+        .mode-btn { padding: 12px 24px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 0 #999; transition: 0.1s; white-space: nowrap; }
         .mode-btn:active { transform: translateY(4px); box-shadow: none; }
         #easyBtn { background-color: #4ADE80; color: white; box-shadow: 0 4px 0 #166534; }
         #hardBtn { background-color: #F87171; color: white; box-shadow: 0 4px 0 #991B1B; }
@@ -269,7 +230,6 @@ function performJump() {
 
 function handleInteraction(e) {
     if (!gameStarted) return;
-    // ボタンクリック時はジャンプさせない
     if (e.target.tagName === 'BUTTON') return;
     if (isCleared || isGameOver) backToTitle(); else performJump();
 }
@@ -397,9 +357,11 @@ function gameLoop() {
         }
     });
 
-    // 3. 疑似3Dパースの地面描画
+    // 3. ✨ 疑似3Dパースの地面描画（隙間対策アップデート）
     const groundCenterX = canvas.width / 2;
-    for (let screenX = 0; screenX <= canvas.width; screenX += 3) {
+    const STEP = 2; // 描画の細かさ
+    
+    for (let screenX = 0; screenX <= canvas.width + STEP; screenX += STEP) {
         let absX = screenX + scrollX;
         let tileIdx = Math.floor(absX / TILE_SIZE);
         
@@ -408,26 +370,34 @@ function gameLoop() {
             let isRoad = (map[tileIdx] === 5);
             let isPit = (map[tileIdx] === 1);
 
+            // パースの計算
             let depth = (groundY - HORIZON_Y) / (BASE_GROUND_Y - HORIZON_Y);
             let perspectiveScale = 0.4 + depth * 0.6;
             
             let screenXFromCenter = screenX - groundCenterX;
             let projectedX = groundCenterX + screenXFromCenter * perspectiveScale;
 
+            // 🆕 隙間ができないように、パースがかかった後の太さ（幅）を計算
+            let drawWidth = Math.ceil(STEP * perspectiveScale) + 2; 
+
             if (!isPit) {
+                // 地面の厚み（側面）
                 ctx.fillStyle = isRoad ? "#3A3A3A" : "#1A6B1A";
-                ctx.fillRect(projectedX, groundY, 4, canvas.height - groundY);
+                ctx.fillRect(projectedX, groundY, drawWidth, canvas.height - groundY);
 
+                // 地面の表面
                 ctx.fillStyle = isRoad ? "#555555" : "#228B22";
-                ctx.fillRect(projectedX, groundY, 4, 6);
+                ctx.fillRect(projectedX, groundY, drawWidth, 6);
 
+                // 道路のセンターライン
                 if (isRoad && Math.floor(absX / 30) % 2 === 0) {
                     ctx.fillStyle = "#FFFFFF";
-                    ctx.fillRect(projectedX + 1, groundY + 2, 2, 2);
+                    ctx.fillRect(projectedX + Math.floor(drawWidth/4), groundY + 2, Math.max(1, Math.floor(drawWidth/2)), 2);
                 }
             } else {
+                // 穴の暗闇部分
                 ctx.fillStyle = "#111111";
-                ctx.fillRect(projectedX, BASE_GROUND_Y, 4, canvas.height - BASE_GROUND_Y);
+                ctx.fillRect(projectedX, BASE_GROUND_Y, drawWidth, canvas.height - BASE_GROUND_Y);
             }
         }
     }
