@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（エフェクト強化版）</title>
+    <title>チェイスのパウパト・アクション（エフェクト調整版）</title>
     <style>
         body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; position: relative; }
         canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -75,8 +75,6 @@ let items = [];
 let invincibleTimer = 0; 
 let highScores = [];
 let isNewRecord = false;
-
-// 🆕 エフェクト（ポロッと落ちるクッキーや汗）を管理する配列
 let particles = [];
 
 const chase = { x: 100, y: 200, width: 50, height: 50, vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: false };
@@ -84,7 +82,7 @@ const goal = { x: STAGE_WIDTH - 200, y: 140, width: 120, height: 200 };
 
 function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
-    particles = []; // エフェクトをリセット
+    particles = []; 
     chase.x = 100; chase.y = BASE_GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
 
     map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
@@ -150,39 +148,34 @@ function getTileHeightForPosition(idx, ratio) {
     return 0;
 }
 
-// 🆕 ダメージを受けた時にクッキーを減らし、汗とクッキー落下エフェクトを生成する関数
+// 🆕 ダメージエフェクト（汗を1つだけ左斜め後ろに飛ばす）
 function triggerDamageEffects(isFallInPit) {
-    // 1. クッキーを1つ減らす（ただし0個未満にはならない）
     let droppedCookieCount = 0;
     if (score > 0) {
         score--;
         droppedCookieCount = 1;
     }
 
-    // 2. 汗エフェクト（💦マークをチェイスの頭上から飛び出させる）
-    // 左右に2つ飛び散るようにループ
-    for (let i = 0; i < 2; i++) {
-        particles.push({
-            type: 'sweat',
-            x: chase.x + chase.width / 2,
-            y: isFallInPit ? 150 : chase.y + 10, // 穴に落ちた時は復活位置の空中から出す
-            vx: (i === 0 ? -2 : 2) + (Math.random() - 0.5), // 左か右へ
-            vy: -5 - Math.random() * 3, // 上方向への初速
-            life: 40 // 表示されるフレーム数
-        });
-    }
+    // ✨ 汗💦を1つだけ、左斜め後ろ（上方向かつ左向き）に飛ばす設定
+    particles.push({
+        type: 'sweat',
+        x: chase.x + 10,                 // チェイスの少し後ろ寄りの位置から
+        y: isFallInPit ? 150 : chase.y + 10, 
+        vx: -2.5,                        // 左方向へのスピード
+        vy: -4.5,                        // 上方向へのスピード
+        life: 35                         // 少しフワッと消えるようにライフを調整
+    });
 
-    // 3. 落としたクッキーエフェクト（チェイスの左後ろにポロッと落ちて転がる）
     if (droppedCookieCount > 0) {
         particles.push({
             type: 'cookie',
-            x: chase.x - 10, // チェイスの左後ろ
+            x: chase.x - 10, 
             y: isFallInPit ? 120 : chase.y + chase.height - 20,
-            vx: -3 - Math.random() * 2, // 左後ろにポロッと
-            vy: -4 - Math.random() * 3, // 少し上に跳ねてから落ちる
+            vx: -3 - Math.random() * 2, 
+            vy: -4 - Math.random() * 3, 
             gravity: 0.5,
-            life: 60, // 1秒間表示
-            bounce: 2 // 2回跳ね返る
+            life: 60, 
+            bounce: 2 
         });
     }
 }
@@ -267,7 +260,6 @@ function gameLoop() {
             chase.isGrounded = false;
         }
 
-        // 穴に落ちた処理の修正
         if (chase.y > 400) {
             playSound(seHit);
             if (gameMode === 'hard') {
@@ -282,19 +274,16 @@ function gameLoop() {
                 while(map[Math.floor((chase.x + scrollX + chase.width/2)/TILE_SIZE)] === 1) {
                     scrollX += TILE_SIZE;
                 }
-                // 🆕 穴から復活した瞬間にエフェクトを発動（引数 true = 穴落下）
                 triggerDamageEffects(true);
             }
         }
 
-        // 障害物衝突の修正
         obstacles.forEach(obs => {
             let screenObsX = obs.x - scrollX;
             if (invincibleTimer === 0 && chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
                 chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
                 playSound(seHit);
                 
-                // 🆕 敵に当たった瞬間にエフェクトを発動（引数 false = 障害物）
                 triggerDamageEffects(false);
 
                 if (gameMode === 'hard') { 
@@ -318,30 +307,26 @@ function gameLoop() {
             saveAndLoadRanking(); 
         }
 
-        // 🆕 エフェクト（パーティクル）の物理演算・位置の更新
         particles.forEach((p, idx) => {
             p.x += p.vx;
             p.y += p.vy;
             p.life--;
 
-            // クッキーだけは重力で地面に落ちて弾む
             if (p.type === 'cookie') {
                 p.vy += p.gravity;
-                // 今いる位置の地面の高さをリアルタイムで取得
                 let currentPartGround = getGroundYAt(p.x + scrollX);
-                if (p.y >= currentPartGround - 15) { // 15は簡易的な半径
+                if (p.y >= currentPartGround - 15) { 
                     p.y = currentPartGround - 15;
                     if (p.bounce > 0) {
-                        p.vy = -p.vy * 0.4; // 反発して少し跳ねる
-                        p.vx *= 0.6; // 横移動も減速
+                        p.vy = -p.vy * 0.4; 
+                        p.vx *= 0.6; 
                         p.bounce--;
                     } else {
-                        p.vx = 0; p.vy = 0; // 弾み終わったら止まる
+                        p.vx = 0; p.vy = 0; 
                     }
                 }
             }
 
-            // 寿命が尽きたエフェクトを配列から消去
             if (p.life <= 0) particles.splice(idx, 1);
         });
     }
@@ -403,15 +388,13 @@ function gameLoop() {
         else { ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height); }
     }
 
-    // 🆕 エフェクト（パーティクル）の描画処理
+    // エフェクト（パーティクル）の描画処理
     particles.forEach(p => {
         if (p.type === 'sweat') {
-            // 💦マークの描画（絵文字テキストを使用）
             ctx.font = "24px sans-serif";
             ctx.textAlign = "center";
             ctx.fillText("💦", p.x, p.y);
         } else if (p.type === 'cookie') {
-            // ポロッと落ちるクッキーの描画（画像があれば使い、無ければ黄色の丸）
             if (itemImg.complete && itemImg.width > 0) {
                 ctx.drawImage(itemImg, p.x, p.y, 25, 25);
             } else {
