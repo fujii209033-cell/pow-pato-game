@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（完全決定版）</title>
+    <title>チェイスのパウパト・アクション（バグ修正版）</title>
     <style>
         body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; position: relative; }
         canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -63,43 +63,39 @@ obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
 // ==========================================
 // 🎮 3. ゲームデータと定数
 // ==========================================
-const STAGE_WIDTH = 4000; // 通常の5倍の長さ
+const STAGE_WIDTH = 4000; 
 const TILE_SIZE = 40;
 const GROUND_Y = 340;
 
 let score, isCleared, isGameOver, gameStarted = false, animeFrame = 0, gameMode = 'easy', lives;
 let scrollX = 0;
-let map = []; // 地形データ
-let obstacles = []; // 障害物リスト
-let items = []; // アイテムリスト
+let map = []; 
+let obstacles = []; 
+let items = []; 
 
 const chase = { x: 100, y: 200, width: 50, height: 50, vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: false };
-const goal = { x: STAGE_WIDTH - 200, y: 140, width: 120, height: 200 }; // 4000pxのホントの右端に配置
+const goal = { x: STAGE_WIDTH - 200, y: 140, width: 120, height: 200 }; 
 
 function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0;
     chase.x = 100; chase.y = GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
 
-    // ① マップ（地形）生成：0は地面、1は穴
     map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
     for(let i = 0; i < map.length; i++) {
-        // スタート付近とゴール付近以外に、ランダムに穴をあける
         if(i > 15 && i < map.length - 10 && i % 18 < 2) {
             map[i] = 1; 
         }
     }
 
-    // ② 障害物の配置（地面がある場所にランダム配置）
     obstacles = [];
     for (let i = 300; i < STAGE_WIDTH - 400; i += 400 + Math.random() * 300) {
         let tileIdx = Math.floor(i / TILE_SIZE);
-        if (map[tileIdx] === 0) { // 地面がある場合だけ
+        if (map[tileIdx] === 0) { 
             const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
             obstacles.push({ x: i, y: GROUND_Y - type.height, width: type.width, height: type.height, img: type.img, color: type.color });
         }
     }
 
-    // ③ アイテム（骨クッキー）の配置
     items = [];
     for (let i = 200; i < STAGE_WIDTH - 300; i += 150 + Math.random() * 100) {
         items.push({ x: i, y: GROUND_Y - 80 - Math.random() * 60, width: 30, height: 30, isCollected: false });
@@ -161,26 +157,23 @@ function gameLoop() {
     // ----- 更新処理 (Update) -----
     if (!isCleared && !isGameOver) {
         animeFrame++;
-        scrollX += 5; // ステージ全体が左に流れる（自動スクロール）
+        scrollX += 5; 
 
-        // チェイスの物理演算（重力）
         chase.vy += chase.gravity;
         chase.y += chase.vy;
 
-        // 足元のタイルをチェック（チェイスの中心点付近の地面があるか）
         let currentTileIndex = Math.floor((chase.x + scrollX + chase.width / 2) / TILE_SIZE);
         
-        if (map[currentTileIndex] === 0) { // 地面あり
+        if (map[currentTileIndex] === 0) { 
             if (chase.y + chase.height >= GROUND_Y) {
                 chase.y = GROUND_Y - chase.height;
                 chase.vy = 0;
                 chase.isGrounded = true;
             }
-        } else { // 地面なし（穴）
+        } else { 
             chase.isGrounded = false;
         }
 
-        // 穴に落ちた判定
         if (chase.y > 400) {
             playSound(seHit);
             if (gameMode === 'hard') {
@@ -189,13 +182,11 @@ function gameLoop() {
                     isGameOver = true; bgm.pause(); playSound(seGameOver);
                 }
             }
-            // 復活処理：落ちたら上空から安全な位置に戻る
             if (!isGameOver) {
                 chase.y = 100; chase.vy = 0;
             }
         }
 
-        // 当たり判定：障害物（画面内に映っているものだけチェック）
         obstacles.forEach(obs => {
             let screenObsX = obs.x - scrollX;
             if (chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
@@ -206,12 +197,10 @@ function gameLoop() {
                     lives--;
                     if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); }
                 }
-                // 当たったらその障害物は遠くへ消す
                 obs.x = -1000;
             }
         });
 
-        // 当たり判定：アイテム（骨クッキー）
         items.forEach(it => {
             let screenItemX = it.x - scrollX;
             if (!it.isCollected &&
@@ -222,7 +211,6 @@ function gameLoop() {
             }
         });
 
-        // ゴール判定（パウステーションに到達したか）
         if (chase.x + scrollX > goal.x) {
             isCleared = true; bgm.pause(); playSound(seClear); playSound(voiceClear);
         }
@@ -231,9 +219,7 @@ function gameLoop() {
     // ----- 描画処理 (Draw) -----
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. 背景の描画
     if (bgImg.complete && bgImg.width > 0) {
-        // 背景をスクロールに合わせてループ描画
         let bgMoveX = -(scrollX * 0.5) % canvas.width;
         ctx.drawImage(bgImg, bgMoveX, 0, canvas.width, canvas.height);
         ctx.drawImage(bgImg, bgMoveX + canvas.width, 0, canvas.width, canvas.height);
@@ -241,19 +227,16 @@ function gameLoop() {
         ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // 2. 地形（地面と穴）の描画
     for(let i = 0; i < map.length; i++) {
         let screenTileX = i * TILE_SIZE - scrollX;
-        // 画面外の余計なものは描画しない（軽さキープ）
         if (screenTileX >= -TILE_SIZE && screenTileX <= canvas.width) {
             if (map[i] === 0) {
-                ctx.fillStyle = "#228B22"; // 緑の地面
-                ctx.fillRect(screenTileX, GROUND_Y, TILE_SIZE, canvas.height - GROUNDY);
+                ctx.fillStyle = "#228B22"; 
+                ctx.fillRect(screenTileX, GROUND_Y, TILE_SIZE, canvas.height - GROUND_Y);
             }
         }
     }
 
-    // 3. アイテムの描画
     items.forEach(it => {
         let screenItemX = it.x - scrollX;
         if (!it.isCollected && screenItemX >= -30 && screenItemX <= canvas.width) {
@@ -262,7 +245,6 @@ function gameLoop() {
         }
     });
 
-    // 4. 障害物の描画
     obstacles.forEach(obs => {
         let screenObsX = obs.x - scrollX;
         if (screenObsX >= -100 && screenObsX <= canvas.width) {
@@ -271,7 +253,6 @@ function gameLoop() {
         }
     });
 
-    // 5. ゴール（パウステーション）の描画
     let screenGoalX = goal.x - scrollX;
     if (goalImg.complete && goalImg.width > 0) {
         ctx.drawImage(goalImg, screenGoalX, goal.y, goal.width, goal.height);
@@ -280,7 +261,6 @@ function gameLoop() {
         ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 16px sans-serif"; ctx.fillText("GOAL", screenGoalX + 30, goal.y + 30);
     }
 
-    // 6. 主人公チェイスの描画
     let currentChaseImg = chaseFrames[0];
     if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
     else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
@@ -291,16 +271,14 @@ function gameLoop() {
         ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height);
     }
 
-    // 7. UI（スコア・ライフ・進捗バー）表示
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     let statusText = "ほねクッキー: " + score + (gameMode === 'hard' ? "  ❤️×" + lives : "");
     ctx.fillText(statusText, 20, 40);
 
-    // ミニ進捗メーター（お子様が「あとどのくらいでパウステーションか」目視できるバー）
-    ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15px * 10, 8);
-    ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15px * 10), 8);
+    // 進捗メーターのバグ修正（pxを削除、GROUND_Yのスペルミス修正）
+    ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15 * 10, 8);
+    ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15 * 10), 8);
 
-    // 8. 終了画面のオーバーレイ
     if (isCleared || isGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#FFFF00"; ctx.font = "bold 40px sans-serif"; ctx.textAlign = "center";
@@ -312,7 +290,6 @@ function gameLoop() {
     }
 }
 
-// 最初のタイトル画面描画
 function drawTitleScreen() {
     ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#228B22"; ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
@@ -321,7 +298,6 @@ function drawTitleScreen() {
     ctx.font = "18px sans-serif"; ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
 }
 
-// 起動時にタイトル表示
 drawTitleScreen();
 </script>
 
