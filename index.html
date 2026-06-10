@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（地形対応版）</title>
+    <title>チェイスのパウパト・アクション（最新完全版）</title>
     <style>
         body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
         canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; }
@@ -23,85 +23,74 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// 🖼️ 画像読み込み
+const chaseFrames = [new Image(), new Image(), new Image()];
+chaseFrames[0].src = "images/chase_run1.png";
+chaseFrames[1].src = "images/chase_run2.png";
+chaseFrames[2].src = "images/chase_jump.png";
+
 // 🎮 ゲーム定数
 const STAGE_WIDTH = 4000;
 const TILE_SIZE = 40;
 const GROUND_Y = 340;
 
-// ステータス管理
-let gameStarted = false, gameMode = 'easy', isCleared = false, isGameOver = false, lives = 3, score = 0;
-let scrollX = 0; // 現在のスクロール位置
-let map = []; // 0:地面, 1:穴
-
-// キャラクター
-const chase = { x: 100, y: 200, width: 40, height: 40, vy: 0, isGrounded: false };
+let gameStarted = false, isCleared = false, isGameOver = false, lives = 3, score = 0;
+let scrollX = 0, map = [];
+const chase = { x: 100, y: 200, width: 50, height: 50, vy: 0, isGrounded: false };
 
 function initGame() {
-    scrollX = 0; chase.x = 100; chase.y = 200; chase.vy = 0;
-    score = 0; lives = 3; isCleared = false; isGameOver = false;
-    // マップ生成（0:地面, 1:穴）
+    scrollX = 0; chase.y = 200; chase.vy = 0;
     map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
-    for(let i=0; i<map.length; i++) {
-        if(i > 10 && i % 15 < 3) map[i] = 1; // 穴をランダムに配置
-    }
+    for(let i=0; i<map.length; i++) if(i > 10 && i % 15 < 3) map[i] = 1;
 }
 
 function startGame(mode) {
-    initGame(); gameMode = mode; gameStarted = true;
+    initGame(); gameStarted = true;
     document.getElementById("menuContainer").style.display = "none";
     requestAnimationFrame(update);
 }
 
-// 物理演算・更新処理
 function update() {
     if(!gameStarted) return;
     
-    // 重力
-    chase.vy += 0.8;
-    chase.y += chase.vy;
-
+    // 重力とジャンプ
+    chase.vy += 0.8; chase.y += chase.vy;
+    
     // 地面判定
     let tileIndex = Math.floor((chase.x + scrollX + 20) / TILE_SIZE);
     if (map[tileIndex] === 0 && chase.y + chase.height > GROUND_Y) {
         chase.y = GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
-    } else if (chase.y > 400) { // 穴に落ちた
-        isGameOver = (gameMode === 'hard') ? --lives <= 0 : false;
-        if(!isGameOver) { chase.y = 100; chase.vy = 0; } // 穴から復活
+    } else { chase.isGrounded = false; }
+
+    // 穴判定
+    if (chase.y > 400) {
+        if(confirm("落ちちゃった！もう一回やる？")) initGame();
     }
 
-    scrollX += 5; // 自動スクロール
+    scrollX += 5;
     if(scrollX > STAGE_WIDTH - 800) isCleared = true;
 
     draw();
     if(!isCleared && !isGameOver) requestAnimationFrame(update);
 }
 
-// 描画処理
 function draw() {
     ctx.clearRect(0, 0, 800, 400);
-    
-    // 地形描画
+    // 地形
     for(let i=0; i<map.length; i++) {
-        if(map[i] === 0) {
-            ctx.fillStyle = "#228B22";
-            ctx.fillRect(i * TILE_SIZE - scrollX, GROUND_Y, TILE_SIZE, 100);
-        }
+        if(map[i] === 0) { ctx.fillStyle = "#228B22"; ctx.fillRect(i * TILE_SIZE - scrollX, GROUND_Y, TILE_SIZE, 100); }
     }
-    
-    // チェイス
-    ctx.fillStyle = "blue";
-    ctx.fillRect(chase.x, chase.y, chase.width, chase.height);
-    
-    if(isCleared || isGameOver) {
-        ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0,0,800,400);
-        ctx.fillStyle = "white"; ctx.textAlign = "center";
-        ctx.fillText(isCleared ? "ゴール！" : "ゲームオーバー", 400, 200);
-    }
+    // チェイス（画像優先、なければ青い四角）
+    let img = chase.isGrounded ? chaseFrames[Math.floor(Date.now()/100)%2] : chaseFrames[2];
+    if(img.complete && img.width > 0) ctx.drawImage(img, chase.x, chase.y, chase.width, chase.height);
+    else { ctx.fillStyle = "blue"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height); }
 }
 
-window.addEventListener("keydown", (e) => {
-    if(e.code === "ArrowUp" && chase.isGrounded) { chase.vy = -12; chase.isGrounded = false; }
-});
+// 🖱️ 操作イベント（クリックと十字キーの両対応）
+function jump() { if(chase.isGrounded) { chase.vy = -12; chase.isGrounded = false; } }
+window.addEventListener("keydown", (e) => { if(e.code === "ArrowUp") jump(); });
+window.addEventListener("mousedown", jump);
+window.addEventListener("touchstart", jump);
 </script>
 </body>
 </html>
