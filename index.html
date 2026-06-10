@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（坂道対応版）</title>
+    <title>チェイスのパウパト・アクション（美麗地形版）</title>
     <style>
         body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; position: relative; }
         canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -65,7 +65,7 @@ obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
 // ==========================================
 const STAGE_WIDTH = 4000; 
 const TILE_SIZE = 40;
-const BASE_GROUND_Y = 340; // 基本の地面の高さ
+const BASE_GROUND_Y = 340; 
 
 let score, isCleared, isGameOver, gameStarted = false, animeFrame = 0, gameMode = 'easy', lives;
 let scrollX = 0;
@@ -81,36 +81,34 @@ function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0;
     chase.x = 100; chase.y = BASE_GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
 
-    // ① マップ（地形）生成
     map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
     for(let i = 0; i < map.length; i++) {
         if(i > 15 && i < map.length - 10) {
-            // 定期的に山（上り坂2マス -> 高い平地2マス -> 下り坂2マス）を作る
+            // なだらかな山を作る（上り・下りのマスの数を増やして傾斜をより自然に）
             if (i % 25 === 0) {
-                map[i] = 2; map[i+1] = 2;       // 上り坂
-                map[i+2] = 4; map[i+3] = 4;     // 高い平地
-                map[i+4] = 3; map[i+5] = 3;     // 下り坂
-                i += 5; // 配置した分インデックスを進める
+                map[i] = 2; map[i+1] = 2; map[i+2] = 2; // なだらかな上り坂（3マス分）
+                map[i+3] = 4; map[i+4] = 4; map[i+5] = 4; // 高い平地（3マス分）
+                map[i+6] = 3; map[i+7] = 3; map[i+8] = 3; // なだらかな下り坂（3マス分）
+                i += 8;
             } 
-            // 山がない場所にはたまに穴をあける
             else if (i % 18 < 2 && map[i] === 0 && map[i-1] === 0) {
                 map[i] = 1;
             }
         }
     }
 
-    // ② 障害物の配置（平地[0か4]がある場所にランダム配置）
+    // 障害物の配置
     obstacles = [];
     for (let i = 300; i < STAGE_WIDTH - 400; i += 400 + Math.random() * 300) {
         let tileIdx = Math.floor(i / TILE_SIZE);
         if (map[tileIdx] === 0 || map[tileIdx] === 4) { 
             const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
-            let h = getGroundYAt(i); // その場所の正確な地面の高さを取得
+            let h = getGroundYAt(i); 
             obstacles.push({ x: i, y: h - type.height, width: type.width, height: type.height, img: type.img, color: type.color });
         }
     }
 
-    // ③ アイテムの配置
+    // アイテムの配置
     items = [];
     for (let i = 200; i < STAGE_WIDTH - 300; i += 150 + Math.random() * 100) {
         let h = getGroundYAt(i);
@@ -118,29 +116,33 @@ function initGame() {
     }
 }
 
-// 指定したX座標における地面のY座標を計算する関数（坂道エンジン核心部）
+// 坂道の高さを滑らかに計算する関数（改良版）
 function getGroundYAt(absoluteX) {
-    let tileIdx = Math.floor(absoluteX / TILE_SIZE);
-    let h1 = getTileHeight(map[tileIdx]);
-    let h2 = getTileHeight(map[tileIdx + 1]);
+    if (absoluteX < 0 || absoluteX >= STAGE_WIDTH) return BASE_GROUND_Y;
     
-    // タイル内での詳細な立ち位置（0.0 〜 1.0）
+    let tileIdx = Math.floor(absoluteX / TILE_SIZE);
     let ratio = (absoluteX % TILE_SIZE) / TILE_SIZE; 
     
-    // 現在のタイルが坂道（2か3）の場合は、次のタイルとの間を斜めに補間する
-    if (map[tileIdx] === 2 || map[tileIdx] === 3) {
-        return BASE_GROUND_Y - (h1 + (h2 - h1) * ratio);
-    }
-    // 普通の平地や穴
-    return BASE_GROUND_Y - h1;
+    let hL = getTileEdgeHeight(tileIdx, 'left');
+    let hR = getTileEdgeHeight(tileIdx, 'right');
+    
+    // 左右のエッジから現在のX座標の高さを滑らかに線形補間
+    return BASE_GROUND_Y - (hL + (hR - hL) * ratio);
 }
 
-// タイルの種類に応じた基本の「高さ」を返す関数
-function getTileHeight(tileType) {
-    if (tileType === 4) return 60; // 高い平地は60px高い
-    if (tileType === 2) return 0;  // 上り坂のスタート位置は0
-    if (tileType === 3) return 60; // 下り坂のスタート位置は60
-    return 0; // 通常の平地や穴
+// タイルの端（左/右）の正確な高さを割り出すヘルパー関数
+function getTileEdgeHeight(idx, edge) {
+    let type = map[idx];
+    if (type === 0 || type === 1) return 0; // 平地・穴
+    if (type === 4) return 60;              // 高台平地
+    
+    if (type === 2) { // 上り坂
+        return edge === 'left' ? 0 : 60;
+    }
+    if (type === 3) { // 下り坂
+        return edge === 'left' ? 60 : 0;
+    }
+    return 0;
 }
 
 function playSound(audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
@@ -196,12 +198,11 @@ function gameLoop() {
         chase.vy += chase.gravity;
         chase.y += chase.vy;
 
-        // チェイスの中心位置の地面の高さを取得
+        // チェイスの足元判定（中心点）
         let chaseAbsX = chase.x + scrollX + chase.width / 2;
         let currentTileIndex = Math.floor(chaseAbsX / TILE_SIZE);
         let currentGroundY = getGroundYAt(chaseAbsX);
         
-        // 穴（1）以外の地面判定
         if (map[currentTileIndex] !== 1) { 
             if (chase.y + chase.height >= currentGroundY) {
                 chase.y = currentGroundY - chase.height;
@@ -212,7 +213,6 @@ function gameLoop() {
             chase.isGrounded = false;
         }
 
-        // 穴に落ちた判定
         if (chase.y > 400) {
             playSound(seHit);
             if (gameMode === 'hard') {
@@ -221,14 +221,12 @@ function gameLoop() {
             }
             if (!isGameOver) {
                 chase.y = 100; chase.vy = 0; invincibleTimer = 120;
-                // 復活時は穴を飛び越えた安全な平地に座標を強制進める
                 while(map[Math.floor((chase.x + scrollX + chase.width/2)/TILE_SIZE)] === 1) {
                     scrollX += TILE_SIZE;
                 }
             }
         }
 
-        // 障害物・アイテムの判定
         obstacles.forEach(obs => {
             let screenObsX = obs.x - scrollX;
             if (invincibleTimer === 0 && chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
@@ -259,28 +257,54 @@ function gameLoop() {
         ctx.drawImage(bgImg, bgMoveX + canvas.width, 0, canvas.width, canvas.height);
     } else { ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
 
-    // 地形（坂道含む）の線形描画
+    // ✨ 連続パス描画（ギザギザを完全に無くす新ロジック）
     ctx.fillStyle = "#228B22";
-    for(let i = 0; i < map.length; i++) {
-        let screenTileX = i * TILE_SIZE - scrollX;
-        if (screenTileX >= -TILE_SIZE && screenTileX <= canvas.width) {
-            if (map[i] !== 1) { // 穴以外を描画
-                ctx.beginPath();
-                let hL = getTileHeight(map[i]);
-                let hR = getTileHeight(map[i+1]);
-                if(map[i] === 2) hR = 60; // 上り坂の右端は高く
-                if(map[i] === 3) hR = 0;  // 下り坂の右端は低く
-                
-                ctx.moveTo(screenTileX, BASE_GROUND_Y - hL);
-                ctx.lineTo(screenTileX + TILE_SIZE, BASE_GROUND_Y - hR);
-                ctx.lineTo(screenTileX + TILE_SIZE, canvas.height);
-                ctx.lineTo(screenTileX, canvas.height);
+    ctx.beginPath();
+    
+    // 画面内に映る最初のタイルと最後のタイルの範囲を計算
+    let startTile = Math.max(0, Math.floor(scrollX / TILE_SIZE));
+    let endTile = Math.min(map.length - 1, Math.ceil((scrollX + canvas.width) / TILE_SIZE));
+    
+    let pathStarted = false;
+    let lastX = 0;
+
+    for (let i = startTile; i <= endTile; i++) {
+        let screenX = i * TILE_SIZE - scrollX;
+        
+        if (map[i] !== 1) { // 穴以外の通常地形
+            let hL = getTileEdgeHeight(i, 'left');
+            let hR = getTileEdgeHeight(i, 'right');
+            
+            if (!pathStarted) {
+                ctx.moveTo(screenX, BASE_GROUND_Y - hL);
+                pathStarted = true;
+            } else {
+                ctx.lineTo(screenX, BASE_GROUND_Y - hL);
+            }
+            ctx.lineTo(screenX + TILE_SIZE, BASE_GROUND_Y - hR);
+            lastX = screenX + TILE_SIZE;
+        } else {
+            // 穴の手前で一旦ポリゴンを下まで閉じて描画を区切る
+            if (pathStarted) {
+                ctx.lineTo(i * TILE_SIZE - scrollX, canvas.height);
+                ctx.lineTo(startTile * TILE_SIZE - scrollX, canvas.height);
                 ctx.closePath();
                 ctx.fill();
+                pathStarted = false;
             }
+            // 次の有効な地面の始点を探すためにスタート位置を更新
+            startTile = i + 1;
         }
     }
+    // 最後に残ったパスを画面下まで閉じて塗りつぶす
+    if (pathStarted) {
+        ctx.lineTo(lastX, canvas.height);
+        ctx.lineTo(startTile * TILE_SIZE - scrollX, canvas.height);
+        ctx.closePath();
+        ctx.fill();
+    }
 
+    // アイテム・障害物・ゴールの描画
     items.forEach(it => {
         let screenItemX = it.x - scrollX;
         if (!it.isCollected && screenItemX >= -30 && screenItemX <= canvas.width) {
@@ -301,6 +325,7 @@ function gameLoop() {
     if (goalImg.complete && goalImg.width > 0) ctx.drawImage(goalImg, screenGoalX, goal.y, goal.width, goal.height);
     else { ctx.fillStyle = "#1E3A8A"; ctx.fillRect(screenGoalX, goal.y, goal.width, goal.height); }
 
+    // チェイスの描画
     if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
         let currentChaseImg = chaseFrames[0];
         if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
@@ -335,4 +360,3 @@ drawTitleScreen();
 </script>
 </body>
 </html>
-　
