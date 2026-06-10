@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（難易度選択版）</title>
+    <title>チェイスのパウパト・アクション（リトライ機能付き）</title>
     <style>
         body {
             margin: 0;
@@ -25,7 +25,6 @@
             max-height: 100%;
             object-fit: contain;
         }
-        /* 難易度選択ボタンのスタイル */
         .menu-container {
             position: absolute;
             display: flex;
@@ -52,7 +51,6 @@
 </head>
 <body>
 
-<!-- 難易度選択ボタン（最初は表示、ゲーム開始で消える） -->
 <div class="menu-container" id="menuContainer">
     <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん（0さい〜）</button>
     <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい（ライフ3つ）</button>
@@ -100,13 +98,13 @@ obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
 // ==========================================
 // 🎮 3. ゲームデータと変数
 // ==========================================
-let score = 0;
-let isCleared = false;
-let isGameOver = false; // 👈 追加：ゲームオーバー状態
+let score;
+let isCleared;
+let isGameOver;
 let gameStarted = false;
 let animeFrame = 0;
-let gameMode = 'easy';  // 👈 追加：現在のモード ('easy' か 'hard')
-let lives = 3;          // 👈 追加：むずかしいモード用のライフ
+let gameMode = 'easy';
+let lives;
 
 const groundY = 340;
 
@@ -115,9 +113,25 @@ const chase = {
     vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: true
 };
 
-let currentObs = getRandomObstacle();
-const item = { x: 600, y: 220, width: 30, height: 30, isCollected: false };
-const goal = { x: 2500, y: 140, width: 120, height: 200, speed: 5 };
+let currentObs;
+let item = { x: 600, y: 220, width: 30, height: 30, isCollected: false };
+let goal = { x: 2500, y: 140, width: 120, height: 200, speed: 5 };
+
+// データを初期状態にリセットする関数（新しく追加）
+function initGame() {
+    score = 0;
+    isCleared = false;
+    isGameOver = false;
+    lives = 3;
+    chase.y = groundY - chase.height;
+    chase.vy = 0;
+    chase.isGrounded = true;
+    currentObs = getRandomObstacle();
+    item.x = 600;
+    item.y = 220;
+    item.isCollected = false;
+    goal.x = 2500; // ゴール位置をもとに戻す
+}
 
 function getRandomObstacle() {
     const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
@@ -133,15 +147,15 @@ function playSound(audio) {
 }
 
 // ==========================================
-// 🕹️ 4. 操作・ゲーム開始
+// 🕹️ 4. 操作・ゲーム開始とリトライ
 // ==========================================
 function startGame(mode) {
     if (gameStarted) return;
     
+    initGame(); // ゲームデータをリセット
     gameMode = mode;
     gameStarted = true;
     
-    // ボタンを画面から消す
     document.getElementById("menuContainer").style.display = "none";
     
     playSound(bgm);
@@ -149,20 +163,44 @@ function startGame(mode) {
     gameLoop();
 }
 
-function doJump() {
-    if (gameStarted && chase.isGrounded && !isCleared && !isGameOver) {
+// クリア時・ゲームオーバー時に画面を叩いてタイトルに戻る関数（新しく追加）
+function backToTitle() {
+    gameStarted = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // タイトル画面の文字を再描画
+    drawTitleScreen();
+    
+    // モード選択ボタンを再表示
+    document.getElementById("menuContainer").style.display = "flex";
+}
+
+function handleTap() {
+    if (!gameStarted) return;
+    
+    // クリアまたはゲームオーバーなら、タップでタイトルに戻る
+    if (isCleared || isGameOver) {
+        backToTitle();
+        return;
+    }
+    
+    // プレイ中ならジャンプ
+    if (chase.isGrounded) {
         chase.vy = chase.jumpPower;
         chase.isGrounded = false;
         playSound(seJump);
     }
 }
-window.addEventListener("keydown", (e) => { if (e.code === "Space") doJump(); });
-window.addEventListener("touchstart", doJump);
+
+window.addEventListener("keydown", (e) => { if (e.code === "Space") handleTap(); });
+window.addEventListener("touchstart", handleTap);
 
 // ==========================================
 // 🔄 5. メインゲームループ
 // ==========================================
 function gameLoop() {
+    if (!gameStarted) return; // タイトルに戻ったらループを止める
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     animeFrame++;
 
@@ -196,14 +234,14 @@ function gameLoop() {
             playSound(seHit);
             
             if (gameMode === 'hard') {
-                lives--; // むずかしいモードならライフが減る
+                lives--;
                 if (lives <= 0) {
                     isGameOver = true;
                     bgm.pause();
                     playSound(seGameOver);
                 }
             }
-            currentObs = getRandomObstacle(); // 仕切り直し
+            currentObs = getRandomObstacle();
         }
 
         // 当たり判定：アイテム
@@ -224,24 +262,20 @@ function gameLoop() {
     }
 
     // --- 描画処理 ---
-    // ゴール
     if (goalImg.complete && goalImg.width > 0) ctx.drawImage(goalImg, goal.x, goal.y, goal.width, goal.height);
     else { ctx.fillStyle = "#1E3A8A"; ctx.fillRect(goal.x, goal.y, goal.width, goal.height); }
 
-    // アイテム
     if (!item.isCollected) {
         if (itemImg.complete && itemImg.width > 0) ctx.drawImage(itemImg, item.x, item.y, item.width, item.height);
         else { ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(item.x + 15, item.y + 15, 15, 0, Math.PI * 2); ctx.fill(); }
     }
 
-    // 障害物
     if (currentObs.img && currentObs.img.complete && currentObs.img.width > 0) {
         ctx.drawImage(currentObs.img, currentObs.x, currentObs.y, currentObs.width, currentObs.height);
     } else {
         ctx.fillStyle = currentObs.color; ctx.fillRect(currentObs.x, currentObs.y, currentObs.width, currentObs.height);
     }
 
-    // 主人公チェイス
     let currentChaseImg = chaseFrames[0];
     if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
     else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
@@ -252,39 +286,47 @@ function gameLoop() {
         ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height);
     }
 
-    // UI（スコアとライフの表示）
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     let statusText = "ほねクッキー: " + score;
-    if (gameMode === 'hard') {
-        statusText += "  ❤️×" + lives;
-    }
+    if (gameMode === 'hard') statusText += "  ❤️×" + lives;
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     ctx.fillText(statusText, 20, 40);
 
     // --- クリア画面 ---
     if (isCleared) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#FFFF00"; ctx.font = "bold 50px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("パウフェクト！", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText("パウフェクト！", canvas.width / 2, canvas.height / 2 - 40);
         ctx.fillStyle = "#FFFFFF"; ctx.font = "24px sans-serif";
-        ctx.fillText("チェイス「パウ・パック、てんかい！」", canvas.width / 2, canvas.height / 2 + 40);
+        ctx.fillText("チェイス「パウ・パック、てんかい！」", canvas.width / 2, canvas.height / 2 + 10);
+        ctx.fillStyle = "#AAA"; ctx.font = "18px sans-serif";
+        ctx.fillText("【 がめんを タッチして タイトルに もどる 】", canvas.width / 2, canvas.height / 2 + 70);
     } 
     // --- ゲームオーバー画面 ---
     else if (isGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#FF3333"; ctx.font = "bold 40px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("パウっと 解決ならず…！", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText("パウっと 解決ならず…！", canvas.width / 2, canvas.height / 2 - 40);
         ctx.fillStyle = "#FFFFFF"; ctx.font = "20px sans-serif";
-        ctx.fillText("リロード（再読み込み）でもう一回挑戦しよう！", canvas.width / 2, canvas.height / 2 + 40);
+        ctx.fillText("もういっかい ちょうせん しよう！", canvas.width / 2, canvas.height / 2 + 10);
+        ctx.fillStyle = "#AAA"; ctx.font = "18px sans-serif";
+        ctx.fillText("【 がめんを タッチして タイトルに もどる 】", canvas.width / 2, canvas.height / 2 + 70);
     } else {
         requestAnimationFrame(gameLoop);
     }
 }
 
-// 最初のタイトル文字描画
-ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
-ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, canvas.height / 2 - 60);
-ctx.font = "18px sans-serif";
-ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
+// 最初とリトライ時にタイトル画面を描画する関数
+function drawTitleScreen() {
+    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#228B22"; ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, canvas.height / 2 - 60);
+    ctx.font = "18px sans-serif";
+    ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
+}
+
+// 初期起動
+drawTitleScreen();
 </script>
 
 </body>
