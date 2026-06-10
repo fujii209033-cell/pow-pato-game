@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（美麗地形＆判定修正版）</title>
+    <title>チェイスのパウパト・アクション（ランキング機能付き）</title>
     <style>
         body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; position: relative; }
         canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -74,25 +74,32 @@ let obstacles = [];
 let items = []; 
 let invincibleTimer = 0; 
 
+// 🆕 ランキング用のデータ
+let highScores = [];
+let isNewRecord = false;
+
 const chase = { x: 100, y: 200, width: 50, height: 50, vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: false };
 const goal = { x: STAGE_WIDTH - 200, y: 140, width: 120, height: 200 }; 
 
 function initGame() {
-    score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0;
+    score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
     chase.x = 100; chase.y = BASE_GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
 
     map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
     for(let i = 0; i < map.length; i++) {
         if(i > 15 && i < map.length - 15) {
-            // なだらかな山（2:上り坂3マス -> 4:高い平地3マス -> 3:下り坂3マス）
-            if (i % 25 === 0 && map[i-1] === 0) {
+            // なだらかな山
+            if (i % 28 === 0 && map[i-1] === 0) {
                 map[i] = 2; map[i+1] = 2; map[i+2] = 2;
                 map[i+3] = 4; map[i+4] = 4; map[i+5] = 4;
                 map[i+6] = 3; map[i+7] = 3; map[i+8] = 3;
                 i += 8;
             } 
-            else if (i % 18 < 2 && map[i] === 0 && map[i-1] === 0) {
+            // 🆕 落とし穴のサイズをしっかり2マス分（80px幅）に固定して生成
+            else if (i % 18 === 0 && map[i] === 0 && map[i-1] === 0 && map[i+1] === 0) {
                 map[i] = 1;
+                map[i+1] = 1; 
+                i += 1;
             }
         }
     }
@@ -116,41 +123,54 @@ function initGame() {
     }
 }
 
-// 📐 坂道の高さを「完全に滑らか」に計算する関数
 function getGroundYAt(absoluteX) {
     if (absoluteX < 0 || absoluteX >= STAGE_WIDTH) return BASE_GROUND_Y;
-    
     let tileIdx = Math.floor(absoluteX / TILE_SIZE);
     let ratio = (absoluteX % TILE_SIZE) / TILE_SIZE; 
-    
-    // 現在のマスと、次のマスの高さを取得
     let hL = getTileHeightForPosition(tileIdx, ratio);
-    
     return BASE_GROUND_Y - hL;
 }
 
-// タイルの種類とマス内の位置(ratio)から正確な高さを出す新ロジック
 function getTileHeightForPosition(idx, ratio) {
     let type = map[idx];
     if (type === 1) return -100; // 穴
     if (type === 4) return 60;   // 高台
     if (type === 0) return 0;    // 平地
 
-    // 上り坂（3マスかけて0から60まで滑らかに上げる）
     if (type === 2) {
         let startIdx = idx;
         while(startIdx > 0 && map[startIdx-1] === 2) startIdx--;
-        let slopeProgress = ((idx - startIdx) + ratio) / 3; // 3マス分の進捗（0.0〜1.0）
+        let slopeProgress = ((idx - startIdx) + ratio) / 3;
         return slopeProgress * 60;
     }
-    // 下り坂（3マスかけて60から0まで滑らかに下げる）
     if (type === 3) {
         let startIdx = idx;
         while(startIdx > 0 && map[startIdx-1] === 3) startIdx--;
-        let slopeProgress = ((idx - startIdx) + ratio) / 3; // 3マス分の進捗（0.0〜1.0）
+        let slopeProgress = ((idx - startIdx) + ratio) / 3;
         return 60 - (slopeProgress * 60);
     }
     return 0;
+}
+
+// 🆕 スコアをブラウザに保存・ランキング化する関数
+function saveAndLoadRanking() {
+    let storageKey = "paw_patrol_scores_" + gameMode;
+    let savedScores = localStorage.getItem(storageKey);
+    highScores = savedScores ? JSON.parse(savedScores) : [];
+
+    // 今回のスコアを履歴に追加
+    highScores.push(score);
+    // 重複を削除して高い順に並び替え
+    highScores = [...new Set(highScores)].sort((a, b) => b - a);
+    
+    // 1位が今回のスコアだったら新記録フラグを立てる
+    if (highScores[0] === score) {
+        isNewRecord = true;
+    }
+
+    // 上位5つだけを残して保存
+    highScores = highScores.slice(0, 5);
+    localStorage.setItem(storageKey, JSON.stringify(highScores));
 }
 
 function playSound(audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
@@ -206,7 +226,6 @@ function gameLoop() {
         chase.vy += chase.gravity;
         chase.y += chase.vy;
 
-        // チェイスの足元判定（中心点）
         let chaseAbsX = chase.x + scrollX + chase.width / 2;
         let currentTileIndex = Math.floor(chaseAbsX / TILE_SIZE);
         let currentGroundY = getGroundYAt(chaseAbsX);
@@ -227,7 +246,10 @@ function gameLoop() {
             playSound(seHit);
             if (gameMode === 'hard') {
                 lives--;
-                if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); }
+                if (lives <= 0) { 
+                    isGameOver = true; bgm.pause(); playSound(seGameOver);
+                    saveAndLoadRanking(); // ゲームオーバー時も一応ランキング処理
+                }
             }
             if (!isGameOver) {
                 chase.y = 100; chase.vy = 0; invincibleTimer = 120;
@@ -237,13 +259,18 @@ function gameLoop() {
             }
         }
 
-        // 障害物・アイテムの判定
         obstacles.forEach(obs => {
             let screenObsX = obs.x - scrollX;
             if (invincibleTimer === 0 && chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
                 chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
                 playSound(seHit);
-                if (gameMode === 'hard') { lives--; if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); } }
+                if (gameMode === 'hard') { 
+                    lives--; 
+                    if (lives <= 0) { 
+                        isGameOver = true; bgm.pause(); playSound(seGameOver); 
+                        saveAndLoadRanking();
+                    } 
+                }
                 obs.x = -1000; invincibleTimer = 120;
             }
         });
@@ -256,7 +283,10 @@ function gameLoop() {
             }
         });
 
-        if (chase.x + scrollX > goal.x) { isCleared = true; bgm.pause(); playSound(seClear); playSound(voiceClear); }
+        if (chase.x + scrollX > goal.x) { 
+            isCleared = true; bgm.pause(); playSound(seClear); playSound(voiceClear); 
+            saveAndLoadRanking(); // 🆕 クリア時にランキングを計算して保存！
+        }
     }
 
     // ----- 描画処理 (Draw) -----
@@ -268,46 +298,25 @@ function gameLoop() {
         ctx.drawImage(bgImg, bgMoveX + canvas.width, 0, canvas.width, canvas.height);
     } else { ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
 
-    // ✨ 地面の描画ロジックをピクセル単位の完全なパスに刷新
+    // 地面の描画
     ctx.fillStyle = "#228B22";
     ctx.beginPath();
-    
     let pathStarted = false;
     let startX = 0;
-
-    // 画面の左端から右端まで、1ピクセルずつ正確な高さを繋いでいく
     for (let screenX = 0; screenX <= canvas.width; screenX++) {
         let absX = screenX + scrollX;
         let tileIdx = Math.floor(absX / TILE_SIZE);
-        
-        if (tileIdx < map.length && map[tileIdx] !== 1) { // 穴じゃない場合
+        if (tileIdx < map.length && map[tileIdx] !== 1) {
             let groundY = getGroundYAt(absX);
-            if (!pathStarted) {
-                ctx.moveTo(screenX, groundY);
-                startX = screenX;
-                pathStarted = true;
-            } else {
-                ctx.lineTo(screenX, groundY);
-            }
-        } else { // 穴の場合、そこまでの地面を下に閉じて描画
-            if (pathStarted) {
-                ctx.lineTo(screenX, canvas.height);
-                ctx.lineTo(startX, canvas.height);
-                ctx.closePath();
-                ctx.fill();
-                pathStarted = false;
-            }
+            if (!pathStarted) { ctx.moveTo(screenX, groundY); startX = screenX; pathStarted = true; }
+            else { ctx.lineTo(screenX, groundY); }
+        } else {
+            if (pathStarted) { ctx.lineTo(screenX, canvas.height); ctx.lineTo(startX, canvas.height); ctx.closePath(); ctx.fill(); pathStarted = false; }
         }
     }
-    // 画面右端まで残った地面を最後に塗りつぶす
-    if (pathStarted) {
-        ctx.lineTo(canvas.width, canvas.height);
-        ctx.lineTo(startX, canvas.height);
-        ctx.closePath();
-        ctx.fill();
-    }
+    if (pathStarted) { ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(startX, canvas.height); ctx.closePath(); ctx.fill(); }
 
-    // アイテム・障害物・ゴールの描画
+    // アイテム・障害物・ゴール描画
     items.forEach(it => {
         let screenItemX = it.x - scrollX;
         if (!it.isCollected && screenItemX >= -30 && screenItemX <= canvas.width) {
@@ -337,18 +346,43 @@ function gameLoop() {
         else { ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height); }
     }
 
+    // UIテキスト
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     ctx.fillText("ほねクッキー: " + score + (gameMode === 'hard' ? "  ❤️×" + lives : ""), 20, 40);
 
     ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15 * 10, 8);
     ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15 * 10), 8);
 
+    // 🆕 リザルト画面（ランキング対応）
     if (isCleared || isGameOver) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#FFFF00"; ctx.font = "bold 40px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText(isCleared ? "パウフェクト！" : "解決ならず…！", canvas.width / 2, canvas.height / 2 - 20);
-        ctx.fillStyle = "#FFFFFF"; ctx.font = "18px sans-serif";
-        ctx.fillText("【 クリック / タップで タイトルに もどる 】", canvas.width / 2, canvas.height / 2 + 40);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#FFFF00"; ctx.font = "bold 36px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText(isCleared ? "パウフェクト！" : "解決ならず…！", canvas.width / 2, 60);
+        
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "20px sans-serif";
+        ctx.fillText("今回のクッキー: " + score + " こ", canvas.width / 2, 105);
+
+        if (isNewRecord && isCleared) {
+            ctx.fillStyle = "#FF4500"; ctx.font = "bold 20px sans-serif";
+            ctx.fillText("👑 じこベストこうしん！ 👑", canvas.width / 2, 135);
+        }
+
+        // 🏆 ランキング表の描画
+        ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(canvas.width / 2 - 150, 155, 300, 150);
+        ctx.fillStyle = "#FFFF00"; ctx.font = "bold 18px sans-serif";
+        ctx.fillText("🏆 ベストきろく 🏆", canvas.width / 2, 180);
+        
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "16px sans-serif";
+        for (let i = 0; i < 3; i++) {
+            let rankText = (i + 1) + "い: " + (highScores[i] !== undefined ? highScores[i] + " こ" : "---");
+            // 自分が今だしたスコアの行をハイライト
+            if (highScores[i] === score && isCleared) ctx.fillStyle = "#FFFF00";
+            else ctx.fillStyle = "#FFFFFF";
+            ctx.fillText(rankText, canvas.width / 2, 215 + i * 25);
+        }
+
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "14px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("【 クリック / タップで タイトルに もどる 】", canvas.width / 2, 345);
     } else { requestAnimationFrame(gameLoop); }
 }
 
