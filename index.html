@@ -111,6 +111,22 @@ function getRandomObstacle() {
 
 function playSound(audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
 
+// 🎮 3. ゲームデータ（ステージ拡張用）
+let scrollX = 0; // チェイスの進んだ距離
+const stageLength = 4000; // 画面幅800の5倍（4000px）
+
+// マップデータ（0:地面, 1:穴）
+// 10ピクセルを1ブロックとして、合計400ブロック分
+const levelMap = [];
+for(let i = 0; i < 400; i++) {
+    // 適当に穴を作る（10ブロックに1回、穴を2つ作るなど）
+    if (i > 20 && i % 40 > 37) levelMap[i] = 1; 
+    else levelMap[i] = 0;
+}
+
+// 物理演算の更新：gameLoop内でscrollXを増やす
+// scrollX += 5; // これで自動スクロールする
+    
 // 🕹️ 4. 操作処理
 function startGame(mode) {
     if (gameStarted) return;
