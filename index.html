@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（疑似3D・完全固定版）</title>
+    <title>チェイスのパウパト・アクション（スクロール完全固定版）</title>
     <style>
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
@@ -66,8 +66,7 @@ obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
 // ==========================================
 const STAGE_WIDTH = 4000; 
 const TILE_SIZE = 40;
-const BASE_GROUND_Y = 320; // 通常の地面の高さ
-const HORIZON_Y = 220;     // 消滅点（カメラの奥の地平線）
+const GROUND_Y_LINE = 320; // 地面の高さをこの1本に固定
 
 let score, isCleared, isGameOver, gameStarted = false, animeFrame = 0, gameMode = 'easy', lives;
 let scrollX = 0;
@@ -86,7 +85,7 @@ const goal = { x: STAGE_WIDTH - 200, y: 120, width: 120, height: 200 };
 function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
     particles = []; 
-    chase.x = 100; chase.y = BASE_GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
+    chase.x = 100; chase.y = GROUND_Y_LINE - chase.height; chase.vy = 0; chase.isGrounded = true;
 
     cityBuildings = [];
     const colors = ["#FF4D4D", "#4D79FF", "#FFD633", "#4DFF4D", "#FFA64D", "#E64DFF"];
@@ -138,26 +137,26 @@ function initGame() {
 }
 
 function getGroundYAt(absoluteX) {
-    if (absoluteX < 0 || absoluteX >= STAGE_WIDTH) return BASE_GROUND_Y;
+    if (absoluteX < 0 || absoluteX >= STAGE_WIDTH) return GROUND_Y_LINE;
     let tileIdx = Math.floor(absoluteX / TILE_SIZE);
     let ratio = (absoluteX % TILE_SIZE) / TILE_SIZE; 
     let hL = getTileHeightForPosition(tileIdx, ratio);
-    return BASE_GROUND_Y - hL;
+    return GROUND_Y_LINE - hL;
 }
 
 function getTileHeightForPosition(idx, ratio) {
     let type = map[idx];
-    if (type === 1) return -120; // 穴はしっかり深く落とす
-    if (type === 4) return 60;   
+    if (type === 1) return -120; // 穴
+    if (type === 4) return 60;   // 山（高台）
     if (type === 0 || type === 5) return 0;    
 
-    if (type === 2) {
+    if (type === 2) { // 登り坂
         let startIdx = idx;
         while(startIdx > 0 && map[startIdx-1] === 2) startIdx--;
         let slopeProgress = ((idx - startIdx) + ratio) / 3;
         return slopeProgress * 60;
     }
-    if (type === 3) {
+    if (type === 3) { // 下り坂
         let startIdx = idx;
         while(startIdx > 0 && map[startIdx-1] === 3) startIdx--;
         let slopeProgress = ((idx - startIdx) + ratio) / 3;
@@ -340,99 +339,63 @@ function gameLoop() {
         let buildingScreenX = b.x - (scrollX * 0.5);
         if (buildingScreenX >= -150 && buildingScreenX <= canvas.width) {
             ctx.fillStyle = b.color;
-            ctx.fillRect(buildingScreenX, BASE_GROUND_Y - b.height, b.width, b.height);
+            ctx.fillRect(buildingScreenX, GROUND_Y_LINE - b.height, b.width, b.height);
             ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
             for (let wx = buildingScreenX + 10; wx < buildingScreenX + b.width - 15; wx += 25) {
-                for (let wy = BASE_GROUND_Y - b.height + 15; wy < BASE_GROUND_Y - 15; wy += 30) {
+                for (let wy = GROUND_Y_LINE - b.height + 15; wy < GROUND_Y_LINE - 15; wy += 30) {
                     ctx.fillRect(wx, wy, 12, 15);
                 }
             }
             if (b.roofType === 'triangle') {
                 ctx.fillStyle = "#333333"; ctx.beginPath();
-                ctx.moveTo(buildingScreenX - 5, BASE_GROUND_Y - b.height);
-                ctx.lineTo(buildingScreenX + b.width / 2, BASE_GROUND_Y - b.height - 25);
-                ctx.lineTo(buildingScreenX + b.width + 5, BASE_GROUND_Y - b.height);
+                ctx.moveTo(buildingScreenX - 5, GROUND_Y_LINE - b.height);
+                ctx.lineTo(buildingScreenX + b.width / 2, GROUND_Y_LINE - b.height - 25);
+                ctx.lineTo(buildingScreenX + b.width + 5, GROUND_Y_LINE - b.height);
                 ctx.closePath(); ctx.fill();
             }
         }
     });
 
-    // 3. 🗺️ 疑似3Dパースの地面描画エンジン（完全固定・ブレなし版）
-    let startTile = Math.floor(Math.max(0, scrollX - 160) / TILE_SIZE);
-    let endTile = Math.ceil((scrollX + canvas.width + 160) / TILE_SIZE);
-    const centerX = canvas.width / 2;
-
-    // 🆕 3Dパースの基準Y座標を完全に固定（変動させない）
-    function getFixed3DPoint(gameX, currentGroundY) {
-        let screenX2D = gameX - scrollX;
-        
-        // 常に「標準の地面の高さ」をベースにパースの比率（奥行き）を完全固定計算する
-        let depth = (BASE_GROUND_Y - HORIZON_Y) / (canvas.height - HORIZON_Y); 
-        let scale = 0.4 + ((currentGroundY - HORIZON_Y) / (canvas.height - HORIZON_Y)) * 0.8;
-        
-        return {
-            x: centerX + (screenX2D - centerX) * scale,
-            y: currentGroundY
-        };
-    }
+    // 3. 🗺️ 2Dスクロールの地面描画エンジン（ブレ・歪み・バグ完全排除）
+    let startTile = Math.floor(Math.max(0, scrollX - TILE_SIZE) / TILE_SIZE);
+    let endTile = Math.ceil((scrollX + canvas.width + TILE_SIZE) / TILE_SIZE);
 
     for (let i = startTile; i < Math.min(map.length, endTile); i++) {
-        let x1 = i * TILE_SIZE;
-        let x2 = (i + 1) * TILE_SIZE;
-
-        let y1_top = getGroundYAt(x1);
-        let y2_top = getGroundYAt(x2);
+        let x1 = i * TILE_SIZE - scrollX;
+        let y1_top = getGroundYAt(i * TILE_SIZE);
         
         let type = map[i];
         let isRoad = (type === 5);
         let isPit = (type === 1);
 
         if (!isPit) {
-            // 地面の4角を固定パースで計算
-            let p1 = getFixed3DPoint(x1, y1_top);
-            let p2 = getFixed3DPoint(x2, y2_top);
-            let p3 = getFixed3DPoint(x2, canvas.height); // 手前端
-            let p4 = getFixed3DPoint(x1, canvas.height); // 手前端
-
-            // 🟥 地面の厚み（奥から手前までのベースラインを完全に固定して描く）
-            ctx.fillStyle = isRoad ? "#3A3A3A" : "#1A6B1A";
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p3.x, canvas.height);
-            ctx.lineTo(p4.x, canvas.height);
-            ctx.closePath(); ctx.fill();
-
-            // 🟩 地面の表面（うっすら緑かグレーのライン）
+            // 🟩 通常の地面（または山・坂道）を四角形・多角形でそのまま綺麗に描画
             ctx.fillStyle = isRoad ? "#555555" : "#228B22";
+            
+            // 次のタイルの左端の高さ
+            let y2_top = getGroundYAt((i + 1) * TILE_SIZE);
+            
             ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p2.x, p2.y + 6);
-            ctx.lineTo(p1.x, p1.y + 6);
-            ctx.closePath(); ctx.fill();
+            ctx.moveTo(x1, y1_top);
+            ctx.lineTo(x1 + TILE_SIZE + 1, y2_top); // 隙間対策で1px多めに描画
+            ctx.lineTo(x1 + TILE_SIZE + 1, canvas.height);
+            ctx.lineTo(x1, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            // 🟫 地面の上の茶色いフチ（装飾ライン）
+            ctx.fillStyle = isRoad ? "#3A3A3A" : "#8B4513";
+            ctx.fillRect(x1, y1_top, TILE_SIZE + 1, 4);
 
             // 🛣️ 道路のセンターライン
-            if (isRoad && Math.floor(x1 / 30) % 2 === 0) {
-                let cp1 = getFixed3DPoint(x1 + 10, y1_top + 2);
-                let cp2 = getFixed3DPoint(x1 + 30, y2_top + 2);
-                ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.moveTo(cp1.x, cp1.y); ctx.lineTo(cp2.x, cp2.y); ctx.stroke();
+            if (isRoad && Math.floor((i * TILE_SIZE) / 30) % 2 === 0) {
+                ctx.fillStyle = "#FFFFFF";
+                ctx.fillRect(x1 + 10, y1_top + 15, 20, 3);
             }
         } else {
-            // 🕳️ 穴（黒い空間）の描画。ここもパースを固定
-            let p1 = getFixed3DPoint(x1, BASE_GROUND_Y);
-            let p2 = getFixed3DPoint(x2, BASE_GROUND_Y);
-            let p3 = getFixed3DPoint(x2, canvas.height);
-            let p4 = getFixed3DPoint(x1, canvas.height);
-
+            // 🕳️ 穴（黒い空間）背景のすきまを完全に真っ黒で塗りつぶす
             ctx.fillStyle = "#111111";
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p3.x, canvas.height);
-            ctx.lineTo(p4.x, canvas.height);
-            ctx.closePath(); ctx.fill();
+            ctx.fillRect(x1, GROUND_Y_LINE, TILE_SIZE + 1, canvas.height - GROUND_Y_LINE);
         }
     }
 
@@ -472,7 +435,7 @@ function gameLoop() {
             ctx.font = "24px sans-serif"; ctx.textAlign = "center"; ctx.fillText("💦", p.x, p.y);
         } else if (p.type === 'cookie') {
             if (itemImg.complete && itemImg.width > 0) { ctx.drawImage(itemImg, p.x, p.y, 25, 25); } 
-            else { ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(p.x + 12, p.y + 12, 12, 0, Math.PI * 2); ctx.fill(); }
+            else { ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(p.x + 12, p.y + 12, 12, 0, Math.PI * 2); fill(); }
         }
     });
 
@@ -510,7 +473,7 @@ function gameLoop() {
 
 function drawTitleScreen() {
     ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#228B22"; ctx.fillRect(0, BASE_GROUND_Y, canvas.width, canvas.height - BASE_GROUND_Y);
+    ctx.fillStyle = "#228B22"; ctx.fillRect(0, GROUND_Y_LINE, canvas.width, canvas.height - GROUND_Y_LINE);
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
     ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, canvas.height / 2 - 60);
     ctx.font = "18px sans-serif"; ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
