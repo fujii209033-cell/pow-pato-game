@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（超ロング＆車踏みつけ版）</title>
+    <title>チェイスのパウパト・アクション（クリア時バク宙エフェクト版）</title>
     <style>
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
@@ -56,7 +56,7 @@ const obstacleTypes = [
     { src: "images/cat.png", width: 45, height: 40, color: "#FFA500", stompatble: false, id: "cat" },
     { src: "images/puddle.png", width: 60, height: 15, color: "#4169E1", stompatble: false, id: "puddle" },
     { src: "images/box.png", width: 40, height: 40, color: "#8B4513", stompatble: true, id: "box" },      
-    { src: "images/car.png", width: 70, height: 40, color: "#333333", stompatble: true, id: "car" },      // 🛠️ 車を踏める属性（true）に変更！
+    { src: "images/car.png", width: 70, height: 40, color: "#333333", stompatble: true, id: "car" },      
     { src: "images/cone.png", width: 30, height: 40, color: "#FF4500", stompatble: true, id: "cone" }     
 ];
 obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
@@ -64,7 +64,7 @@ obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
 // ==========================================
 // 🎮 3. ゲームデータと定数
 // ==========================================
-const STAGE_WIDTH = 16000; // 🛠️ さらに倍の長さに拡張（8000 -> 16000）
+const STAGE_WIDTH = 16000; 
 const TILE_SIZE = 40;
 const GROUND_Y_LINE = 320; 
 
@@ -84,6 +84,10 @@ let cityBuildings = [];
 
 let isPressingAction = false; 
 
+// 🛠️ バク宙（回転アニメーション）用の状態管理変数を追加
+let chaseRotation = 0;       // 現在の回転角度（ラジアン）
+let isBackflipping = false;   // いまバク宙しているかどうか
+
 const chase = { 
     x: 100, 
     y: 200, 
@@ -101,11 +105,11 @@ const goal = { x: STAGE_WIDTH - 250, y: 120, width: 120, height: 200 };
 function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
     slipTimer = 0; currentSpeed = baseSpeed;
+    chaseRotation = 0; isBackflipping = false; // 初期化
     particles = []; 
     chase.x = 100; chase.y = GROUND_Y_LINE - chase.height; chase.vy = 0; chase.isGrounded = true;
     isPressingAction = false;
 
-    // ステージ延長に伴い、背景ビルの数も200個に増量
     cityBuildings = [];
     const colors = ["#FF4D4D", "#4D79FF", "#FFD633", "#4DFF4D", "#FFA64D", "#E64DFF"];
     for (let i = 0; i < 200; i++) {
@@ -151,7 +155,6 @@ function initGame() {
         }
     }
 
-    // 障害物の配置
     obstacles = [];
     for (let i = 300; i < STAGE_WIDTH - 500; i += 300 + Math.random() * 250) {
         let tileIdx = Math.floor(i / TILE_SIZE);
@@ -162,7 +165,6 @@ function initGame() {
         }
     }
 
-    // アイテム（クッキー）の配置
     items = [];
     for (let i = 200; i < STAGE_WIDTH - 400; i += 100 + Math.random() * 60) {
         let h = getGroundYAt(i);
@@ -173,7 +175,6 @@ function initGame() {
         if (map[tileIdx] === 1) {
             items.push({ x: i, y: GROUND_Y_LINE - 100, width: 30, height: 30, isCollected: false });
         } else if (matchedObs && matchedObs.stompatble) {
-            // 🛠️ 箱・コーンに加えて、「車」の場所にも大ホップ用超高空クッキーが生成されるようになります
             items.push({ x: i, y: h - 130, width: 30, height: 30, isCollected: false });
             items.push({ x: i + 35, y: h - 190, width: 30, height: 30, isCollected: false }); 
             items.push({ x: i + 70, y: h - 130, width: 30, height: 30, isCollected: false });
@@ -273,6 +274,7 @@ function backToTitle() {
 function pressAction() {
     if (!gameStarted) return;
     if (isCleared || isGameOver) { backToTitle(); return; }
+    if (isBackflipping) return; // バク宙中は追加入力を禁止
     
     if (chase.isGrounded) {
         chase.vy = chase.jumpPower; 
@@ -311,107 +313,139 @@ window.addEventListener("touchend", releaseAction);
 function gameLoop() {
     if (!gameStarted) return;
     
-    if (!isCleared && !isGameOver) {
+    // 🛠️ 通常プレイ、またはクリア後のバク宙演出中ならアニメーションを動かす
+    if (!isGameOver) {
         animeFrame++;
 
-        if (slipTimer > 0) {
-            slipTimer--;
-            currentSpeed = baseSpeed * 0.4; 
-            if (Math.random() > 0.7) {
-                particles.push({ type: 'slip_splash', x: chase.x + 10 + Math.random()*20, y: chase.y + chase.height, vx: -2 - Math.random()*2, vy: -1 - Math.random()*2, life: 15 });
+        // 🛠️ クリア後の演出処理
+        if (isCleared) {
+            // ゴール到達の最初の1フレームだけ、大バク宙ジャンプをセット
+            if (!isBackflipping) {
+                isBackflipping = true;
+                chase.vy = -12; // ふんわり高いクリアバク宙
+                chase.isGrounded = false;
             }
-        } else {
-            currentSpeed = baseSpeed;
-        }
 
-        scrollX += currentSpeed; 
+            // バク宙の物理移動
+            chase.vy += chase.gravity;
+            chase.y += chase.vy;
 
-        if (invincibleTimer > 0) invincibleTimer--;
+            // 後ろにくるっと1回転（時計回りにマイナス＝バク宙）させる
+            if (!chase.isGrounded) {
+                chaseRotation -= 0.14; // 回転スピード
+            }
 
-        if (isPressingAction && chase.jumpHoldTimer > 0) {
-            chase.vy -= 0.65; 
-            chase.jumpHoldTimer--;
-        }
-
-        chase.vy += chase.gravity;
-        chase.y += chase.vy;
-
-        let chaseAbsX = chase.x + scrollX + chase.width / 2;
-        let currentTileIndex = Math.floor(chaseAbsX / TILE_SIZE);
-        let currentGroundY = getGroundYAt(chaseAbsX);
-        
-        if (map[currentTileIndex] !== 1) { 
+            let currentGroundY = getGroundYAt(chase.x + scrollX + chase.width/2);
+            // 着地チェック
             if (chase.y + chase.height >= currentGroundY) {
                 chase.y = currentGroundY - chase.height;
                 chase.vy = 0;
                 chase.isGrounded = true;
-                chase.jumpHoldTimer = 0; 
-            } else { chase.isGrounded = false; }
-        } else { chase.isGrounded = false; }
-
-        if (chase.y > 400) {
-            playSound(seHit);
-            if (gameMode === 'hard') {
-                lives--;
-                if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); saveAndLoadRanking(); }
+                chaseRotation = 0; // 角度をカチッと正面に戻す
             }
-            if (!isGameOver) {
-                chase.y = 100; chase.vy = 0; invincibleTimer = 120; slipTimer = 0;
-                while(map[Math.floor((chase.x + scrollX + chase.width/2)/TILE_SIZE)] === 1) { scrollX += TILE_SIZE; }
-                triggerDamageEffects(true);
+        } 
+        // 通常のゲーム進行
+        else {
+            if (slipTimer > 0) {
+                slipTimer--;
+                currentSpeed = baseSpeed * 0.4; 
+                if (Math.random() > 0.7) {
+                    particles.push({ type: 'slip_splash', x: chase.x + 10 + Math.random()*20, y: chase.y + chase.height, vx: -2 - Math.random()*2, vy: -1 - Math.random()*2, life: 15 });
+                }
+            } else {
+                currentSpeed = baseSpeed;
             }
-        }
 
-        obstacles.forEach(obs => {
-            if (obs.isDefeated) return;
-            let screenObsX = obs.x - scrollX;
+            scrollX += currentSpeed; 
+
+            if (invincibleTimer > 0) invincibleTimer--;
+
+            if (isPressingAction && chase.jumpHoldTimer > 0) {
+                chase.vy -= 0.65; 
+                chase.jumpHoldTimer--;
+            }
+
+            chase.vy += chase.gravity;
+            chase.y += chase.vy;
+
+            let chaseAbsX = chase.x + scrollX + chase.width / 2;
+            let currentTileIndex = Math.floor(chaseAbsX / TILE_SIZE);
+            let currentGroundY = getGroundYAt(chaseAbsX);
             
-            if (chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
-                chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
-                
-                // 🛠️ 車（obs.id === "car"）も stompatble になったので、ここを通って上から踏めるようになります！
-                if (obs.stompatble && chase.vy > 0 && chase.y + chase.height - chase.vy <= obs.y + 14) {
-                    playSound(seItem); 
-                    obs.isDefeated = true; 
-                    chase.y = obs.y - chase.height;
-                    chase.vy = -14.5; // 🛠️ 車は大きいので、踏みつけた時の跳ね返り力もほんの少しだけアップして爽快に！
-                    chase.isGrounded = false;
+            if (map[currentTileIndex] !== 1) { 
+                if (chase.y + chase.height >= currentGroundY) {
+                    chase.y = currentGroundY - chase.height;
+                    chase.vy = 0;
+                    chase.isGrounded = true;
                     chase.jumpHoldTimer = 0; 
+                } else { chase.isGrounded = false; }
+            } else { chase.isGrounded = false; }
+
+            if (chase.y > 400) {
+                playSound(seHit);
+                if (gameMode === 'hard') {
+                    lives--;
+                    if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); saveAndLoadRanking(); }
+                }
+                if (!isGameOver) {
+                    chase.y = 100; chase.vy = 0; invincibleTimer = 120; slipTimer = 0;
+                    while(map[Math.floor((chase.x + scrollX + chase.width/2)/TILE_SIZE)] === 1) { scrollX += TILE_SIZE; }
+                    triggerDamageEffects(true);
+                }
+            }
+
+            obstacles.forEach(obs => {
+                if (obs.isDefeated) return;
+                let screenObsX = obs.x - scrollX;
+                
+                if (chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
+                    chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
                     
-                    for(let k=0; k<5; k++) {
-                        particles.push({ type: 'smoke', x: screenObsX + obs.width/2, y: obs.y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 20 });
+                    if (obs.stompatble && chase.vy > 0 && chase.y + chase.height - chase.vy <= obs.y + 14) {
+                        playSound(seItem); 
+                        obs.isDefeated = true; 
+                        chase.y = obs.y - chase.height;
+                        chase.vy = -14.5; 
+                        chase.isGrounded = false;
+                        chase.jumpHoldTimer = 0; 
+                        
+                        for(let k=0; k<5; k++) {
+                            particles.push({ type: 'smoke', x: screenObsX + obs.width/2, y: obs.y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 20 });
+                        }
+                    } 
+                    else if (obs.id === "puddle") {
+                        if (slipTimer === 0) {
+                            slipTimer = 40; 
+                            playSound(seHit);
+                        }
                     }
-                } 
-                else if (obs.id === "puddle") {
-                    if (slipTimer === 0) {
-                        slipTimer = 40; 
+                    else if (invincibleTimer === 0) {
                         playSound(seHit);
+                        triggerDamageEffects(false);
+                        if (gameMode === 'hard') { 
+                            lives--; 
+                            if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); saveAndLoadRanking(); } 
+                        }
+                        obs.isDefeated = true; invincibleTimer = 120;
                     }
                 }
-                else if (invincibleTimer === 0) {
-                    playSound(seHit);
-                    triggerDamageEffects(false);
-                    if (gameMode === 'hard') { 
-                        lives--; 
-                        if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); saveAndLoadRanking(); } 
-                    }
-                    obs.isDefeated = true; invincibleTimer = 120;
+            });
+
+            items.forEach(it => {
+                let screenItemX = it.x - scrollX;
+                if (!it.isCollected && chase.x < screenItemX + it.width && chase.x + chase.width > screenItemX &&
+                    chase.y < it.y + it.height && chase.y + chase.height > it.y) {
+                    it.isCollected = true; score += 1; playSound(seItem);
                 }
-            }
-        });
+            });
 
-        items.forEach(it => {
-            let screenItemX = it.x - scrollX;
-            if (!it.isCollected && chase.x < screenItemX + it.width && chase.x + chase.width > screenItemX &&
-                chase.y < it.y + it.height && chase.y + chase.height > it.y) {
-                it.isCollected = true; score += 1; playSound(seItem);
+            // 🛠️ ゴール判定に触れた時の処理
+            if (chase.x + scrollX > goal.x) { 
+                isCleared = true; bgm.pause(); playSound(seClear); playSound(voiceClear); saveAndLoadRanking(); 
             }
-        });
-
-        if (chase.x + scrollX > goal.x) { 
-            isCleared = true; bgm.pause(); playSound(seClear); playSound(voiceClear); saveAndLoadRanking(); 
         }
 
+        // パーティクルの更新
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i];
             p.x += p.vx; p.y += p.vy; p.life--;
@@ -521,17 +555,24 @@ function gameLoop() {
     if (goalImg.complete && goalImg.width > 0) ctx.drawImage(goalImg, screenGoalX, goal.y, goal.width, goal.height);
     else { ctx.fillStyle = "#1E3A8A"; ctx.fillRect(screenGoalX, goal.y, goal.width, goal.height); }
 
-    // 5. チェイスの描画
+    // 5. チェイスの描画（🛠️ 回転エフェクト対応版レンダラー）
     if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
         let currentChaseImg = chaseFrames[0];
         if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
         else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
         
+        ctx.save();
+        // 🛠️ 画像の中心を回転の軸にするための座標移動
+        ctx.translate(chase.x + chase.width / 2, chase.y + chase.height / 2);
+        ctx.rotate(chaseRotation); // バク宙の角度を適用
+        
         if (currentChaseImg.complete && currentChaseImg.width > 0) {
-            ctx.drawImage(currentChaseImg, chase.x, chase.y, chase.width, chase.height);
+            // 中心点を移動したため、描画座標は -width/2, -height/2 になる
+            ctx.drawImage(currentChaseImg, -chase.width / 2, -chase.height / 2, chase.width, chase.height);
         } else { 
-            ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height); 
+            ctx.fillStyle = "#0000FF"; ctx.fillRect(-chase.width / 2, -chase.height / 2, chase.width, chase.height); 
         }
+        ctx.restore();
     }
 
     if (slipTimer > 0) {
@@ -558,11 +599,17 @@ function gameLoop() {
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     ctx.fillText("ほねクッキー: " + score + (gameMode === 'hard' ? "  ❤️×" + lives : ""), 20, 40);
 
-    // プログレスバー（超ロング版の長さに追従）
     ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15 * 10, 8);
     ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15 * 10), 8);
 
+    // リザルト画面の表示
     if (isCleared || isGameOver) {
+        // バク宙が完全に着地（または終了）するまでは、リザルトの黒帯メニューを出さずにジャンプを魅せる
+        if (isCleared && !chase.isGrounded) {
+            requestAnimationFrame(gameLoop);
+            return;
+        }
+
         ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#FFFF00"; ctx.font = "bold 36px sans-serif"; ctx.textAlign = "center";
         ctx.fillText(isCleared ? "パウフェクト！" : "解決ならず…！", canvas.width / 2, 60);
