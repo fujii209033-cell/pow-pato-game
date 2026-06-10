@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（ランキング機能付き）</title>
+    <title>チェイスのパウパト・アクション（エフェクト強化版）</title>
     <style>
         body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; position: relative; }
         canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -69,33 +69,33 @@ const BASE_GROUND_Y = 340;
 
 let score, isCleared, isGameOver, gameStarted = false, animeFrame = 0, gameMode = 'easy', lives;
 let scrollX = 0;
-let map = []; // 0:平地, 1:穴, 2:上り坂, 3:下り坂, 4:高い平地
+let map = []; 
 let obstacles = []; 
 let items = []; 
 let invincibleTimer = 0; 
-
-// 🆕 ランキング用のデータ
 let highScores = [];
 let isNewRecord = false;
+
+// 🆕 エフェクト（ポロッと落ちるクッキーや汗）を管理する配列
+let particles = [];
 
 const chase = { x: 100, y: 200, width: 50, height: 50, vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: false };
 const goal = { x: STAGE_WIDTH - 200, y: 140, width: 120, height: 200 }; 
 
 function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
+    particles = []; // エフェクトをリセット
     chase.x = 100; chase.y = BASE_GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
 
     map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
     for(let i = 0; i < map.length; i++) {
         if(i > 15 && i < map.length - 15) {
-            // なだらかな山
             if (i % 28 === 0 && map[i-1] === 0) {
                 map[i] = 2; map[i+1] = 2; map[i+2] = 2;
                 map[i+3] = 4; map[i+4] = 4; map[i+5] = 4;
                 map[i+6] = 3; map[i+7] = 3; map[i+8] = 3;
                 i += 8;
             } 
-            // 🆕 落とし穴のサイズをしっかり2マス分（80px幅）に固定して生成
             else if (i % 18 === 0 && map[i] === 0 && map[i-1] === 0 && map[i+1] === 0) {
                 map[i] = 1;
                 map[i+1] = 1; 
@@ -104,7 +104,6 @@ function initGame() {
         }
     }
 
-    // 障害物の配置
     obstacles = [];
     for (let i = 300; i < STAGE_WIDTH - 400; i += 400 + Math.random() * 300) {
         let tileIdx = Math.floor(i / TILE_SIZE);
@@ -115,7 +114,6 @@ function initGame() {
         }
     }
 
-    // アイテムの配置
     items = [];
     for (let i = 200; i < STAGE_WIDTH - 300; i += 150 + Math.random() * 100) {
         let h = getGroundYAt(i);
@@ -133,9 +131,9 @@ function getGroundYAt(absoluteX) {
 
 function getTileHeightForPosition(idx, ratio) {
     let type = map[idx];
-    if (type === 1) return -100; // 穴
-    if (type === 4) return 60;   // 高台
-    if (type === 0) return 0;    // 平地
+    if (type === 1) return -100; 
+    if (type === 4) return 60;   
+    if (type === 0) return 0;    
 
     if (type === 2) {
         let startIdx = idx;
@@ -152,23 +150,50 @@ function getTileHeightForPosition(idx, ratio) {
     return 0;
 }
 
-// 🆕 スコアをブラウザに保存・ランキング化する関数
+// 🆕 ダメージを受けた時にクッキーを減らし、汗とクッキー落下エフェクトを生成する関数
+function triggerDamageEffects(isFallInPit) {
+    // 1. クッキーを1つ減らす（ただし0個未満にはならない）
+    let droppedCookieCount = 0;
+    if (score > 0) {
+        score--;
+        droppedCookieCount = 1;
+    }
+
+    // 2. 汗エフェクト（💦マークをチェイスの頭上から飛び出させる）
+    // 左右に2つ飛び散るようにループ
+    for (let i = 0; i < 2; i++) {
+        particles.push({
+            type: 'sweat',
+            x: chase.x + chase.width / 2,
+            y: isFallInPit ? 150 : chase.y + 10, // 穴に落ちた時は復活位置の空中から出す
+            vx: (i === 0 ? -2 : 2) + (Math.random() - 0.5), // 左か右へ
+            vy: -5 - Math.random() * 3, // 上方向への初速
+            life: 40 // 表示されるフレーム数
+        });
+    }
+
+    // 3. 落としたクッキーエフェクト（チェイスの左後ろにポロッと落ちて転がる）
+    if (droppedCookieCount > 0) {
+        particles.push({
+            type: 'cookie',
+            x: chase.x - 10, // チェイスの左後ろ
+            y: isFallInPit ? 120 : chase.y + chase.height - 20,
+            vx: -3 - Math.random() * 2, // 左後ろにポロッと
+            vy: -4 - Math.random() * 3, // 少し上に跳ねてから落ちる
+            gravity: 0.5,
+            life: 60, // 1秒間表示
+            bounce: 2 // 2回跳ね返る
+        });
+    }
+}
+
 function saveAndLoadRanking() {
     let storageKey = "paw_patrol_scores_" + gameMode;
     let savedScores = localStorage.getItem(storageKey);
     highScores = savedScores ? JSON.parse(savedScores) : [];
-
-    // 今回のスコアを履歴に追加
     highScores.push(score);
-    // 重複を削除して高い順に並び替え
     highScores = [...new Set(highScores)].sort((a, b) => b - a);
-    
-    // 1位が今回のスコアだったら新記録フラグを立てる
-    if (highScores[0] === score) {
-        isNewRecord = true;
-    }
-
-    // 上位5つだけを残して保存
+    if (highScores[0] === score) isNewRecord = true;
     highScores = highScores.slice(0, 5);
     localStorage.setItem(storageKey, JSON.stringify(highScores));
 }
@@ -242,13 +267,14 @@ function gameLoop() {
             chase.isGrounded = false;
         }
 
+        // 穴に落ちた処理の修正
         if (chase.y > 400) {
             playSound(seHit);
             if (gameMode === 'hard') {
                 lives--;
                 if (lives <= 0) { 
                     isGameOver = true; bgm.pause(); playSound(seGameOver);
-                    saveAndLoadRanking(); // ゲームオーバー時も一応ランキング処理
+                    saveAndLoadRanking();
                 }
             }
             if (!isGameOver) {
@@ -256,20 +282,24 @@ function gameLoop() {
                 while(map[Math.floor((chase.x + scrollX + chase.width/2)/TILE_SIZE)] === 1) {
                     scrollX += TILE_SIZE;
                 }
+                // 🆕 穴から復活した瞬間にエフェクトを発動（引数 true = 穴落下）
+                triggerDamageEffects(true);
             }
         }
 
+        // 障害物衝突の修正
         obstacles.forEach(obs => {
             let screenObsX = obs.x - scrollX;
             if (invincibleTimer === 0 && chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
                 chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
                 playSound(seHit);
+                
+                // 🆕 敵に当たった瞬間にエフェクトを発動（引数 false = 障害物）
+                triggerDamageEffects(false);
+
                 if (gameMode === 'hard') { 
                     lives--; 
-                    if (lives <= 0) { 
-                        isGameOver = true; bgm.pause(); playSound(seGameOver); 
-                        saveAndLoadRanking();
-                    } 
+                    if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); saveAndLoadRanking(); } 
                 }
                 obs.x = -1000; invincibleTimer = 120;
             }
@@ -285,8 +315,35 @@ function gameLoop() {
 
         if (chase.x + scrollX > goal.x) { 
             isCleared = true; bgm.pause(); playSound(seClear); playSound(voiceClear); 
-            saveAndLoadRanking(); // 🆕 クリア時にランキングを計算して保存！
+            saveAndLoadRanking(); 
         }
+
+        // 🆕 エフェクト（パーティクル）の物理演算・位置の更新
+        particles.forEach((p, idx) => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life--;
+
+            // クッキーだけは重力で地面に落ちて弾む
+            if (p.type === 'cookie') {
+                p.vy += p.gravity;
+                // 今いる位置の地面の高さをリアルタイムで取得
+                let currentPartGround = getGroundYAt(p.x + scrollX);
+                if (p.y >= currentPartGround - 15) { // 15は簡易的な半径
+                    p.y = currentPartGround - 15;
+                    if (p.bounce > 0) {
+                        p.vy = -p.vy * 0.4; // 反発して少し跳ねる
+                        p.vx *= 0.6; // 横移動も減速
+                        p.bounce--;
+                    } else {
+                        p.vx = 0; p.vy = 0; // 弾み終わったら止まる
+                    }
+                }
+            }
+
+            // 寿命が尽きたエフェクトを配列から消去
+            if (p.life <= 0) particles.splice(idx, 1);
+        });
     }
 
     // ----- 描画処理 (Draw) -----
@@ -346,6 +403,23 @@ function gameLoop() {
         else { ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height); }
     }
 
+    // 🆕 エフェクト（パーティクル）の描画処理
+    particles.forEach(p => {
+        if (p.type === 'sweat') {
+            // 💦マークの描画（絵文字テキストを使用）
+            ctx.font = "24px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("💦", p.x, p.y);
+        } else if (p.type === 'cookie') {
+            // ポロッと落ちるクッキーの描画（画像があれば使い、無ければ黄色の丸）
+            if (itemImg.complete && itemImg.width > 0) {
+                ctx.drawImage(itemImg, p.x, p.y, 25, 25);
+            } else {
+                ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(p.x + 12, p.y + 12, 12, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+    });
+
     // UIテキスト
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     ctx.fillText("ほねクッキー: " + score + (gameMode === 'hard' ? "  ❤️×" + lives : ""), 20, 40);
@@ -353,7 +427,7 @@ function gameLoop() {
     ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15 * 10, 8);
     ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15 * 10), 8);
 
-    // 🆕 リザルト画面（ランキング対応）
+    // リザルト画面
     if (isCleared || isGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#FFFF00"; ctx.font = "bold 36px sans-serif"; ctx.textAlign = "center";
@@ -367,7 +441,6 @@ function gameLoop() {
             ctx.fillText("👑 じこベストこうしん！ 👑", canvas.width / 2, 135);
         }
 
-        // 🏆 ランキング表の描画
         ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(canvas.width / 2 - 150, 155, 300, 150);
         ctx.fillStyle = "#FFFF00"; ctx.font = "bold 18px sans-serif";
         ctx.fillText("🏆 ベストきろく 🏆", canvas.width / 2, 180);
@@ -375,7 +448,6 @@ function gameLoop() {
         ctx.fillStyle = "#FFFFFF"; ctx.font = "16px sans-serif";
         for (let i = 0; i < 3; i++) {
             let rankText = (i + 1) + "い: " + (highScores[i] !== undefined ? highScores[i] + " こ" : "---");
-            // 自分が今だしたスコアの行をハイライト
             if (highScores[i] === score && isCleared) ctx.fillStyle = "#FFFF00";
             else ctx.fillStyle = "#FFFFFF";
             ctx.fillText(rankText, canvas.width / 2, 215 + i * 25);
