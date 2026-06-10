@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チェイスのパウパト・アクション（バグ修正版）</title>
+    <title>チェイスのパウパト・アクション（無敵復活機能付き）</title>
     <style>
         body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; position: relative; }
         canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -73,11 +73,14 @@ let map = [];
 let obstacles = []; 
 let items = []; 
 
+// 🆕 無敵時間管理用の変数
+let invincibleTimer = 0; 
+
 const chase = { x: 100, y: 200, width: 50, height: 50, vy: 0, gravity: 0.6, jumpPower: -12, isGrounded: false };
 const goal = { x: STAGE_WIDTH - 200, y: 140, width: 120, height: 200 }; 
 
 function initGame() {
-    score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0;
+    score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0;
     chase.x = 100; chase.y = GROUND_Y - chase.height; chase.vy = 0; chase.isGrounded = true;
 
     map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
@@ -159,6 +162,9 @@ function gameLoop() {
         animeFrame++;
         scrollX += 5; 
 
+        // 🆕 無敵タイマーのカウントダウン（1フレームごとに1減らす）
+        if (invincibleTimer > 0) invincibleTimer--;
+
         chase.vy += chase.gravity;
         chase.y += chase.vy;
 
@@ -174,33 +180,43 @@ function gameLoop() {
             chase.isGrounded = false;
         }
 
+        // 穴に落ちた判定の修正
         if (chase.y > 400) {
             playSound(seHit);
             if (gameMode === 'hard') {
-                lives--;
+                lives--; // 🆕 むずかしいモードならしっかりHP（ライフ）を減らす
                 if (lives <= 0) {
                     isGameOver = true; bgm.pause(); playSound(seGameOver);
                 }
             }
             if (!isGameOver) {
-                chase.y = 100; chase.vy = 0;
+                // 復活処理：穴の少し先の上空から安全に復帰
+                chase.y = 100; 
+                chase.vy = 0;
+                invincibleTimer = 120; // 🆕 2秒間（60フレーム×2）の無敵時間をセット
             }
         }
 
+        // 当たり判定：障害物
         obstacles.forEach(obs => {
             let screenObsX = obs.x - scrollX;
             if (chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
                 chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
                 
-                playSound(seHit);
-                if (gameMode === 'hard') {
-                    lives--;
-                    if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); }
+                // 🆕 無敵時間中でない場合のみダメージを受ける
+                if (invincibleTimer === 0) {
+                    playSound(seHit);
+                    if (gameMode === 'hard') {
+                        lives--;
+                        if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); }
+                    }
+                    obs.x = -1000; // 当たった障害物を消去
+                    invincibleTimer = 120; // 🆕 障害物に当たった後も2秒間無敵にする
                 }
-                obs.x = -1000;
             }
         });
 
+        // 当たり判定：アイテム
         items.forEach(it => {
             let screenItemX = it.x - scrollX;
             if (!it.isCollected &&
@@ -261,21 +277,24 @@ function gameLoop() {
         ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 16px sans-serif"; ctx.fillText("GOAL", screenGoalX + 30, goal.y + 30);
     }
 
-    let currentChaseImg = chaseFrames[0];
-    if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
-    else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
+    // 🆕 チェイスの描画（無敵時間中はチカチカ点滅させる）
+    // 5フレームごとに表示・非表示を切り替えるパラパラ漫画の仕組み
+    if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
+        let currentChaseImg = chaseFrames[0];
+        if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
+        else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
 
-    if (currentChaseImg.complete && currentChaseImg.width > 0) {
-        ctx.drawImage(currentChaseImg, chase.x, chase.y, chase.width, chase.height);
-    } else {
-        ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height);
+        if (currentChaseImg.complete && currentChaseImg.width > 0) {
+            ctx.drawImage(currentChaseImg, chase.x, chase.y, chase.width, chase.height);
+        } else {
+            ctx.fillStyle = "#0000FF"; ctx.fillRect(chase.x, chase.y, chase.width, chase.height);
+        }
     }
 
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     let statusText = "ほねクッキー: " + score + (gameMode === 'hard' ? "  ❤️×" + lives : "");
     ctx.fillText(statusText, 20, 40);
 
-    // 進捗メーターのバグ修正（pxを削除、GROUND_Yのスペルミス修正）
     ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15 * 10, 8);
     ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15 * 10), 8);
 
