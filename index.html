@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（爽快アクション＆エフェクト版）</title>
+    <title>チェイスのパウパト・アクション（超ロング＆車踏みつけ版）</title>
     <style>
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
@@ -55,24 +55,24 @@ chaseFrames[2].src = "images/chase_jump.png";
 const obstacleTypes = [
     { src: "images/cat.png", width: 45, height: 40, color: "#FFA500", stompatble: false, id: "cat" },
     { src: "images/puddle.png", width: 60, height: 15, color: "#4169E1", stompatble: false, id: "puddle" },
-    { src: "images/box.png", width: 40, height: 40, color: "#8B4513", stompatble: true, id: "box" },      // 🛠️ 踏める属性を追加
-    { src: "images/car.png", width: 70, height: 40, color: "#333333", stompatble: false, id: "car" },
-    { src: "images/cone.png", width: 30, height: 40, color: "#FF4500", stompatble: true, id: "cone" }     // 🛠️ 踏める属性を追加
+    { src: "images/box.png", width: 40, height: 40, color: "#8B4513", stompatble: true, id: "box" },      
+    { src: "images/car.png", width: 70, height: 40, color: "#333333", stompatble: true, id: "car" },      // 🛠️ 車を踏める属性（true）に変更！
+    { src: "images/cone.png", width: 30, height: 40, color: "#FF4500", stompatble: true, id: "cone" }     
 ];
 obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
 
 // ==========================================
 // 🎮 3. ゲームデータと定数
 // ==========================================
-const STAGE_WIDTH = 8000; 
+const STAGE_WIDTH = 16000; // 🛠️ さらに倍の長さに拡張（8000 -> 16000）
 const TILE_SIZE = 40;
 const GROUND_Y_LINE = 320; 
 
 let score, isCleared, isGameOver, gameStarted = false, animeFrame = 0, gameMode = 'easy', lives;
 let scrollX = 0;
-let baseSpeed = 5;       // 通常のスクロール速度
-let currentSpeed = 5;    // スリップを考慮した現在の速度
-let slipTimer = 0;       // スリップ状態の残りタイマー
+let baseSpeed = 5;       
+let currentSpeed = 5;    
+let slipTimer = 0;       
 let map = []; 
 let obstacles = []; 
 let items = []; 
@@ -84,16 +84,15 @@ let cityBuildings = [];
 
 let isPressingAction = false; 
 
-// 🛠️ スパッとしたキレのあるジャンプのための物理パラメータ調整
 const chase = { 
     x: 100, 
     y: 200, 
     width: 50, 
     height: 50, 
     vy: 0, 
-    gravity: 0.85,       // 重力を強くしてキレを出す（0.6 -> 0.85）
-    jumpPower: -10,      // 初期飛び上がり（鋭く上る）
-    maxJumpHold: 8,      // 長押し猶予フレーム
+    gravity: 0.85,       
+    jumpPower: -10,      
+    maxJumpHold: 8,      
     jumpHoldTimer: 0,   
     isGrounded: false 
 };
@@ -106,9 +105,10 @@ function initGame() {
     chase.x = 100; chase.y = GROUND_Y_LINE - chase.height; chase.vy = 0; chase.isGrounded = true;
     isPressingAction = false;
 
+    // ステージ延長に伴い、背景ビルの数も200個に増量
     cityBuildings = [];
     const colors = ["#FF4D4D", "#4D79FF", "#FFD633", "#4DFF4D", "#FFA64D", "#E64DFF"];
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
         cityBuildings.push({
             x: i * 130 + Math.random() * 40,
             width: 75 + Math.random() * 30,
@@ -151,6 +151,7 @@ function initGame() {
         }
     }
 
+    // 障害物の配置
     obstacles = [];
     for (let i = 300; i < STAGE_WIDTH - 500; i += 300 + Math.random() * 250) {
         let tileIdx = Math.floor(i / TILE_SIZE);
@@ -161,27 +162,24 @@ function initGame() {
         }
     }
 
+    // アイテム（クッキー）の配置
     items = [];
     for (let i = 200; i < STAGE_WIDTH - 400; i += 100 + Math.random() * 60) {
         let h = getGroundYAt(i);
         let tileIdx = Math.floor(i / TILE_SIZE);
         
-        // 🛠️ 敵配置をチェック
         let matchedObs = obstacles.find(obs => Math.abs(obs.x - i) < 60);
 
         if (map[tileIdx] === 1) {
-            // 落とし穴の上
             items.push({ x: i, y: GROUND_Y_LINE - 100, width: 30, height: 30, isCollected: false });
         } else if (matchedObs && matchedObs.stompatble) {
-            // 🛠️ 踏める敵（箱・コーン）がいる場所：大ホップで届く「超高空」にクッキーのラインを配置！
+            // 🛠️ 箱・コーンに加えて、「車」の場所にも大ホップ用超高空クッキーが生成されるようになります
             items.push({ x: i, y: h - 130, width: 30, height: 30, isCollected: false });
-            items.push({ x: i + 35, y: h - 180, width: 30, height: 30, isCollected: false }); // 大ホップの頂点
+            items.push({ x: i + 35, y: h - 190, width: 30, height: 30, isCollected: false }); 
             items.push({ x: i + 70, y: h - 130, width: 30, height: 30, isCollected: false });
         } else if (matchedObs) {
-            // 踏めない敵がいる場所：少し高めに浮かせる
             items.push({ x: i, y: h - 130, width: 30, height: 30, isCollected: false });
         } else {
-            // 通常の配置（たまに大ジャンプ用の高空クッキーを混ぜる）
             let yPos = Math.random() > 0.75 ? h - 160 : h - 60 - Math.random() * 30;
             items.push({ x: i, y: yPos, width: 30, height: 30, isCollected: false });
         }
@@ -316,10 +314,9 @@ function gameLoop() {
     if (!isCleared && !isGameOver) {
         animeFrame++;
 
-        // 🛠️ 水たまりのスリップ処理
         if (slipTimer > 0) {
             slipTimer--;
-            currentSpeed = baseSpeed * 0.4; // スピード大幅ダウン（足踏み状態）
+            currentSpeed = baseSpeed * 0.4; 
             if (Math.random() > 0.7) {
                 particles.push({ type: 'slip_splash', x: chase.x + 10 + Math.random()*20, y: chase.y + chase.height, vx: -2 - Math.random()*2, vy: -1 - Math.random()*2, life: 15 });
             }
@@ -331,9 +328,8 @@ function gameLoop() {
 
         if (invincibleTimer > 0) invincibleTimer--;
 
-        // 🛠️ スパッとした上昇を生み出す長押しブースト処理
         if (isPressingAction && chase.jumpHoldTimer > 0) {
-            chase.vy -= 0.65; // 鋭くスッと高く持ち上げる
+            chase.vy -= 0.65; 
             chase.jumpHoldTimer--;
         }
 
@@ -366,7 +362,6 @@ function gameLoop() {
             }
         }
 
-        // 🛠️ 障害物の当たり判定（踏みつけ・スリップ対応）
         obstacles.forEach(obs => {
             if (obs.isDefeated) return;
             let screenObsX = obs.x - scrollX;
@@ -374,28 +369,25 @@ function gameLoop() {
             if (chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
                 chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
                 
-                // 🛠️ 踏みつけ判定のチェック：落下中かつ、チェイスの足元が敵の上部付近であること
-                if (obs.stompatble && chase.vy > 0 && chase.y + chase.height - chase.vy <= obs.y + 12) {
-                    playSound(seItem); // ポンッと小気味いい音
-                    obs.isDefeated = true; // 敵を撃破
+                // 🛠️ 車（obs.id === "car"）も stompatble になったので、ここを通って上から踏めるようになります！
+                if (obs.stompatble && chase.vy > 0 && chase.y + chase.height - chase.vy <= obs.y + 14) {
+                    playSound(seItem); 
+                    obs.isDefeated = true; 
                     chase.y = obs.y - chase.height;
-                    chase.vy = -14; // 🛠️ 「強ジャンプ」を超える超大ジャンプ（強ホップ）を発動！
+                    chase.vy = -14.5; // 🛠️ 車は大きいので、踏みつけた時の跳ね返り力もほんの少しだけアップして爽快に！
                     chase.isGrounded = false;
-                    chase.jumpHoldTimer = 0; // 長押しタイマーはリセットして一撃の高さにする
+                    chase.jumpHoldTimer = 0; 
                     
-                    // 煙のエフェクトを出す
                     for(let k=0; k<5; k++) {
                         particles.push({ type: 'smoke', x: screenObsX + obs.width/2, y: obs.y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 20 });
                     }
                 } 
-                // 🛠️ 水たまり（スリップ）の判定
                 else if (obs.id === "puddle") {
                     if (slipTimer === 0) {
-                        slipTimer = 40; // スリップ開始（約0.6秒間）
+                        slipTimer = 40; 
                         playSound(seHit);
                     }
                 }
-                // 通常の被ダメージ
                 else if (invincibleTimer === 0) {
                     playSound(seHit);
                     triggerDamageEffects(false);
@@ -542,7 +534,6 @@ function gameLoop() {
         }
     }
 
-    // 🛠️ スリップ中のマーク（🌀）を頭上に描画
     if (slipTimer > 0) {
         ctx.font = "20px sans-serif";
         ctx.textAlign = "center";
@@ -567,6 +558,7 @@ function gameLoop() {
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
     ctx.fillText("ほねクッキー: " + score + (gameMode === 'hard' ? "  ❤️×" + lives : ""), 20, 40);
 
+    // プログレスバー（超ロング版の長さに追従）
     ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15 * 10, 8);
     ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15 * 10), 8);
 
