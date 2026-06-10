@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（疑似3D・完全修正版）</title>
+    <title>チェイスのパウパト・アクション（疑似3D・完全固定版）</title>
     <style>
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
@@ -66,8 +66,8 @@ obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
 // ==========================================
 const STAGE_WIDTH = 4000; 
 const TILE_SIZE = 40;
-const BASE_GROUND_Y = 320; // 3D地面の「奥（地平線）」の初期基準ライン
-const HORIZON_Y = 200;     // カメラの消滅点（ここに向かってすぼまる）
+const BASE_GROUND_Y = 320; // 通常の地面の高さ
+const HORIZON_Y = 220;     // 消滅点（カメラの奥の地平線）
 
 let score, isCleared, isGameOver, gameStarted = false, animeFrame = 0, gameMode = 'easy', lives;
 let scrollX = 0;
@@ -147,7 +147,7 @@ function getGroundYAt(absoluteX) {
 
 function getTileHeightForPosition(idx, ratio) {
     let type = map[idx];
-    if (type === 1) return -100; 
+    if (type === 1) return -120; // 穴はしっかり深く落とす
     if (type === 4) return 60;   
     if (type === 0 || type === 5) return 0;    
 
@@ -357,21 +357,22 @@ function gameLoop() {
         }
     });
 
-    // 3. 🗺️ 疑似3Dパースの地面描画エンジン（完全改修版）
-    // 画面の左端から右端までカバーするマップ上のタイル範囲を計算
-    let startTile = Math.floor(Math.max(0, scrollX - 100) / TILE_SIZE);
-    let endTile = Math.ceil((scrollX + canvas.width + 100) / TILE_SIZE);
-    
+    // 3. 🗺️ 疑似3Dパースの地面描画エンジン（完全固定・ブレなし版）
+    let startTile = Math.floor(Math.max(0, scrollX - 160) / TILE_SIZE);
+    let endTile = Math.ceil((scrollX + canvas.width + 160) / TILE_SIZE);
     const centerX = canvas.width / 2;
 
-    // 🆕 3D変換をおこなう関数
-    function get3DPoint(gameX, gameY) {
+    // 🆕 3Dパースの基準Y座標を完全に固定（変動させない）
+    function getFixed3DPoint(gameX, currentGroundY) {
         let screenX2D = gameX - scrollX;
-        let depth = (gameY - HORIZON_Y) / (BASE_GROUND_Y - HORIZON_Y);
-        let scale = 0.4 + depth * 0.8; // 手前ほどワイドに広げる
+        
+        // 常に「標準の地面の高さ」をベースにパースの比率（奥行き）を完全固定計算する
+        let depth = (BASE_GROUND_Y - HORIZON_Y) / (canvas.height - HORIZON_Y); 
+        let scale = 0.4 + ((currentGroundY - HORIZON_Y) / (canvas.height - HORIZON_Y)) * 0.8;
+        
         return {
             x: centerX + (screenX2D - centerX) * scale,
-            y: gameY
+            y: currentGroundY
         };
     }
 
@@ -386,55 +387,52 @@ function gameLoop() {
         let isRoad = (type === 5);
         let isPit = (type === 1);
 
-        // タイル上面の4点を3Dに変換（台形をつくる）
-        let p1 = get3DPoint(x1, y1_top);
-        let p2 = get3DPoint(x2, y2_top);
-        let p3 = get3DPoint(x2, canvas.height); // 手前いっぱいまで伸ばす
-        let p4 = get3DPoint(x1, canvas.height);
-
         if (!isPit) {
-            // 🟥 地面の「側面（厚み）」を先に描画して立体感を出す
+            // 地面の4角を固定パースで計算
+            let p1 = getFixed3DPoint(x1, y1_top);
+            let p2 = getFixed3DPoint(x2, y2_top);
+            let p3 = getFixed3DPoint(x2, canvas.height); // 手前端
+            let p4 = getFixed3DPoint(x1, canvas.height); // 手前端
+
+            // 🟥 地面の厚み（奥から手前までのベースラインを完全に固定して描く）
             ctx.fillStyle = isRoad ? "#3A3A3A" : "#1A6B1A";
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p2.x, canvas.height);
-            ctx.lineTo(p1.x, canvas.height);
-            ctx.closePath();
-            ctx.fill();
+            ctx.lineTo(p3.x, canvas.height);
+            ctx.lineTo(p4.x, canvas.height);
+            ctx.closePath(); ctx.fill();
 
-            // 🟩 地面の「表面」を描画
+            // 🟩 地面の表面（うっすら緑かグレーのライン）
             ctx.fillStyle = isRoad ? "#555555" : "#228B22";
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
-            // 表面にうっすら厚み（6px）を持たせる
             ctx.lineTo(p2.x, p2.y + 6);
             ctx.lineTo(p1.x, p1.y + 6);
-            ctx.closePath();
-            ctx.fill();
+            ctx.closePath(); ctx.fill();
 
             // 🛣️ 道路のセンターライン
             if (isRoad && Math.floor(x1 / 30) % 2 === 0) {
-                let cp1 = get3DPoint(x1 + 10, y1_top + 2);
-                let cp2 = get3DPoint(x1 + 30, y2_top + 2);
-                ctx.strokeStyle = "#FFFFFF";
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(cp1.x, cp1.y);
-                ctx.lineTo(cp2.x, cp2.y);
-                ctx.stroke();
+                let cp1 = getFixed3DPoint(x1 + 10, y1_top + 2);
+                let cp2 = getFixed3DPoint(x1 + 30, y2_top + 2);
+                ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(cp1.x, cp1.y); ctx.lineTo(cp2.x, cp2.y); ctx.stroke();
             }
         } else {
-            // 🕳️ 穴の暗闇（背景の白やグレーを完全に隠す）
+            // 🕳️ 穴（黒い空間）の描画。ここもパースを固定
+            let p1 = getFixed3DPoint(x1, BASE_GROUND_Y);
+            let p2 = getFixed3DPoint(x2, BASE_GROUND_Y);
+            let p3 = getFixed3DPoint(x2, canvas.height);
+            let p4 = getFixed3DPoint(x1, canvas.height);
+
             ctx.fillStyle = "#111111";
             ctx.beginPath();
-            ctx.moveTo(p1.x, BASE_GROUND_Y);
-            ctx.lineTo(p2.x, BASE_GROUND_Y);
-            ctx.lineTo(p2.x, canvas.height);
-            ctx.lineTo(p1.x, canvas.height);
-            ctx.closePath();
-            ctx.fill();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.lineTo(p3.x, canvas.height);
+            ctx.lineTo(p4.x, canvas.height);
+            ctx.closePath(); ctx.fill();
         }
     }
 
