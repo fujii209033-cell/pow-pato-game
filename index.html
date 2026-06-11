@@ -187,17 +187,15 @@ function initGame() {
     }
 }
 
-
 function getGroundYAt(absoluteX) {
     if (absoluteX < 0 || absoluteX >= STAGE_WIDTH) return GROUND_Y_LINE;
     let tileIdx = Math.floor(absoluteX / TILE_SIZE);
     let ratio = (absoluteX % TILE_SIZE) / TILE_SIZE; 
     
     let type = map[tileIdx];
-    if (type === 1) return 9999; // 穴は深い位置に設定
+    if (type === 1) return GROUND_Y_LINE + 200; 
     if (type === 4) return GROUND_Y_LINE - 60;  
     
-    // 上り坂
     if (type === 2) { 
         let startIdx = tileIdx;
         while(startIdx > 0 && map[startIdx-1] === 2) startIdx--;
@@ -206,7 +204,6 @@ function getGroundYAt(absoluteX) {
         let slopeProgress = ((tileIdx - startIdx) + ratio) / count;
         return GROUND_Y_LINE - (slopeProgress * 60);
     }
-    // 🛠️ 下り坂：正しく高さが計算されるように調整
     if (type === 3) { 
         let startIdx = tileIdx;
         while(startIdx > 0 && map[startIdx-1] === 3) startIdx--;
@@ -217,7 +214,6 @@ function getGroundYAt(absoluteX) {
     }
     return GROUND_Y_LINE; 
 }
-
 
 function triggerDamageEffects(isFallInPit) {
     let droppedCookieCount = 0;
@@ -369,24 +365,22 @@ function gameLoop() {
                 chase.jumpHoldTimer--;
             }
 
-            // ... (前略：scrollXの加算や重力計算など)
             chase.vy += chase.gravity;
             chase.y += chase.vy;
 
             let chaseAbsX = chase.x + scrollX + chase.width / 2;
+            let currentTileIndex = Math.floor(chaseAbsX / TILE_SIZE);
             let currentGroundY = getGroundYAt(chaseAbsX);
             
-            // 🛠️ 接地判定の修正：±10pxの猶予を持たせ、坂道でもスムーズに接地判定されるようにする
-            if (chase.vy >= 0 && chase.y + chase.height >= currentGroundY - 10 && chase.y + chase.height <= currentGroundY + 10) {
-                chase.y = currentGroundY - chase.height;
-                chase.vy = 0;
-                chase.isGrounded = true;
-                chase.jumpHoldTimer = 0; 
-            } else {
-                chase.isGrounded = false;
-            }
+            if (map[currentTileIndex] !== 1) { 
+                if (chase.y + chase.height >= currentGroundY) {
+                    chase.y = currentGroundY - chase.height;
+                    chase.vy = 0;
+                    chase.isGrounded = true;
+                    chase.jumpHoldTimer = 0; 
+                } else { chase.isGrounded = false; }
+            } else { chase.isGrounded = false; }
 
-            // 穴への落下判定
             if (chase.y > 400) {
                 playSound(seHit);
                 if (gameMode === 'hard') {
@@ -473,22 +467,15 @@ function gameLoop() {
     // 1. 背景
     if (bgImg.complete && bgImg.width > 0) {
         let bgMoveX = -(scrollX * 0.3) % canvas.width;
-        // 【実装イメージ】
-　　　　　// 遠くの山や空をゆっくり動かす
-　　　　　// --- 描画処理の順番 ---
-
-// 1. 遠景（背景画像）
-let skyMoveX = -(scrollX * 0.1) % canvas.width;
-ctx.drawImage(bgImg, skyMoveX, 0, canvas.width, canvas.height);
-ctx.drawImage(skyMoveX + canvas.width, 0, canvas.width, canvas.height);
-
-
-
+        ctx.drawImage(bgImg, bgMoveX, 0, canvas.width, canvas.height);
+        ctx.drawImage(bgImg, bgMoveX + canvas.width, 0, canvas.width, canvas.height);
+    } else { 
+        ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+    }
 
     // 2. 街並み
-// 2. 中景（街並み）
-cityBuildings.forEach(b => {
-    let buildingScreenX = b.x - (scrollX * 0.5); 
+    cityBuildings.forEach(b => {
+        let buildingScreenX = b.x - (scrollX * 0.5);
         if (buildingScreenX >= -150 && buildingScreenX <= canvas.width) {
             ctx.fillStyle = b.color;
             ctx.fillRect(buildingScreenX, GROUND_Y_LINE - b.height, b.width, b.height);
