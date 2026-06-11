@@ -473,8 +473,10 @@ function gameLoop() {
     // 1. 背景
     if (bgImg.complete && bgImg.width > 0) {
         let bgMoveX = -(scrollX * 0.3) % canvas.width;
-        ctx.drawImage(bgImg, bgMoveX, 0, canvas.width, canvas.height);
-        ctx.drawImage(bgImg, bgMoveX + canvas.width, 0, canvas.width, canvas.height);
+        // 【実装イメージ】
+　　　　　// 遠くの山や空をゆっくり動かす
+　　　　　ctx.drawImage(bgImg, -(scrollX * 0.1) % 800, 0, 800, 400);
+　　　　　ctx.drawImage(bgImg, -(scrollX * 0.1) % 800 + 800, 0, 800, 400);
     } else { 
         ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height); 
     }
