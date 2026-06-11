@@ -369,22 +369,24 @@ function gameLoop() {
                 chase.jumpHoldTimer--;
             }
 
+            // ... (前略：scrollXの加算や重力計算など)
             chase.vy += chase.gravity;
             chase.y += chase.vy;
 
             let chaseAbsX = chase.x + scrollX + chase.width / 2;
-            let currentTileIndex = Math.floor(chaseAbsX / TILE_SIZE);
             let currentGroundY = getGroundYAt(chaseAbsX);
             
-            if (map[currentTileIndex] !== 1) { 
-                if (chase.y + chase.height >= currentGroundY) {
-                    chase.y = currentGroundY - chase.height;
-                    chase.vy = 0;
-                    chase.isGrounded = true;
-                    chase.jumpHoldTimer = 0; 
-                } else { chase.isGrounded = false; }
-            } else { chase.isGrounded = false; }
+            // 🛠️ 接地判定の修正：±10pxの猶予を持たせ、坂道でもスムーズに接地判定されるようにする
+            if (chase.vy >= 0 && chase.y + chase.height >= currentGroundY - 10 && chase.y + chase.height <= currentGroundY + 10) {
+                chase.y = currentGroundY - chase.height;
+                chase.vy = 0;
+                chase.isGrounded = true;
+                chase.jumpHoldTimer = 0; 
+            } else {
+                chase.isGrounded = false;
+            }
 
+            // 穴への落下判定
             if (chase.y > 400) {
                 playSound(seHit);
                 if (gameMode === 'hard') {
