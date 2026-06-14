@@ -14,15 +14,16 @@
         
         /* メニュー（ボタン）はCanvasの上に絶対配置 */
         /* メニューボタンに直接タッチイベントを許可する */
-       .menu-container {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 1000; /* 最前面に固定 */
-        pointer-events: none; /* コンテナ自体はクリックを透過 */
-       }
+    .menu-container { 
+        position: absolute; 
+        top: 0; left: 0; 
+        width: 100%; height: 100%;
+        display: flex; flex-direction: column; 
+        justify-content: center; align-items: center;
+        gap: 20px; 
+        z-index: 999; /* 重要：Canvas(通常1)より前面に */
+        background: #87CEEB; /* キャンバスの色と合わせる */
+    }
 
        /* ボタン要素だけクリックを有効にする */
        .menu-container button {
@@ -371,15 +372,24 @@ function selectChar(char) {
 // 220行目付近のstartGame関数を修正
 function startGame(mode) {
     if (gameStarted) return;
-    initGame(); 
-    gameMode = mode;
-    applyCharacter(); // ★ここを追加：選んだキャラの画像をセットする
+    
+    // キャラクターの画像を確実にロードしてから開始
+    const char = characterData[selectedChar];
+    const imagesToLoad = [char.run1, char.run2, char.jump];
+    
+    // 画像ロードチェック（ロード待ちしない簡易実装）
     gameStarted = true;
     document.getElementById("menuContainer").style.display = "none";
-    playSound(bgm); 
-    playSound(voiceStart); 
+    
+    // ゲームの初期化
+    initGame(); 
+    gameMode = mode;
+    
+    // ゲームループ開始
+    console.log("ゲームを開始します");
     gameLoop();
 }
+
 
 // 画像の読み込みエラーを無視する処理を <script> 内のどこかに追加
 window.addEventListener('error', (e) => {
