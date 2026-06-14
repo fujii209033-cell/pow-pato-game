@@ -5,37 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>パウパト・アクション</title>
     <style>
-        * { box-sizing: border-box; touch-action: none; user-select: none; }
-        body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        
-        /* ゲーム全体を囲むコンテナ */
+        body { margin: 0; overflow: hidden; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #gameWrapper { position: relative; width: 800px; height: 400px; }
         canvas { background-color: #87CEEB; display: block; width: 100%; height: 100%; }
         
-        /* メニュー（ボタン）はCanvasの上に絶対配置 */
-        /* メニューボタンに直接タッチイベントを許可する */
-    .menu-container { 
-        position: absolute; 
-        top: 0; left: 0; 
-        width: 100%; height: 100%;
-        display: flex; flex-direction: column; 
-        justify-content: center; align-items: center;
-        gap: 20px; 
-        z-index: 999; /* 重要：Canvas(通常1)より前面に */
-        background: #87CEEB; /* キャンバスの色と合わせる */
-    }
-
-       /* ボタン要素だけクリックを有効にする */
-       .menu-container button {
-        pointer-events: auto; /* ボタンのみ反応させる */
-        cursor: pointer;
-        touch-action: manipulation; /* モバイルでのタップ反応を改善 */
-       }
+        .menu-container { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            gap: 20px; z-index: 100; pointer-events: none; /* 一旦ポインタを無効化 */
+            gap: 20px; z-index: 999; background: #87CEEB;
         }
-        .menu-container > * { pointer-events: auto; } /* ボタンだけポインタ有効化 */
-        
         .char-btn { width: 80px; height: 80px; border: 4px solid #ddd; cursor: pointer; background: white; border-radius: 10px; }
         .char-btn.selected { border-color: #FBBF24; }
         .char-btn img { width: 100%; height: 100%; object-fit: contain; }
@@ -46,7 +24,7 @@
 
 <div id="gameWrapper">
     <div class="menu-container" id="menuContainer">
-        <div style="font-size: 24px; font-weight: bold; color: white; margin-bottom: 10px;">チェイスの パウパト・アクション！</div>
+        <div style="font-size: 24px; font-weight: bold; color: white;">チェイスの パウパト・アクション！</div>
         <div style="display: flex; gap: 20px;">
             <button class="char-btn selected" id="btn-chase" onclick="selectChar('chase')">
                 <img src="images/chase_run1.png">
@@ -64,28 +42,35 @@
 </div>
 
 <script>
-// --- 初期設定 ---
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-let gameStarted = false;
-let selectedChar = 'chase';
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    let gameStarted = false;
+    let selectedChar = 'chase';
 
-// --- キャラクタ選択 ---
-function selectChar(char) {
-    selectedChar = char;
-    document.querySelectorAll('.char-btn').forEach(btn => btn.classList.remove('selected'));
-    document.getElementById('btn-' + char).classList.add('selected');
-}
+    function selectChar(char) {
+        selectedChar = char;
+        document.querySelectorAll('.char-btn').forEach(btn => btn.classList.remove('selected'));
+        document.getElementById('btn-' + char).classList.add('selected');
+    }
 
-// --- スタート処理 ---
-function startGame(mode) {
-    if (gameStarted) return;
-    gameStarted = true;
-    document.getElementById("menuContainer").style.display = "none";
-    // ここで既存の initGame() を呼ぶ
-    initGame(); 
-    gameMode = mode;
-    gameLoop();
+    function startGame(mode) {
+        if (gameStarted) return;
+        gameStarted = true;
+        
+        // メニューを隠す
+        document.getElementById("menuContainer").style.display = "none";
+        
+        // ゲーム開始のための初期化ロジック
+        initGame(); // 元のコードのinitGameを実行
+        gameMode = mode;
+        
+        // 念のため、ブラウザが描画ループを停止していないか強制的に再開
+        console.log("ゲーム開始: " + mode);
+        gameLoop(); 
+    }
+
+  
+
 }// 初期タイトル描画
 function drawTitle() {
     ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, 800, 400);
