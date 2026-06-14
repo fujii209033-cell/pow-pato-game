@@ -2,16 +2,13 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>パウパト・アクション</title>
     <style>
         body { margin: 0; background: #87CEEB; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
         #wrapper { position: relative; width: 800px; height: 400px; }
         canvas { display: block; background: #87CEEB; }
-        
-        #menuContainer { 
-            position: absolute; top: 0; left: 0; width: 800px; height: 400px; 
-            z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
-        }
+        #menuContainer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
         button { padding: 20px; font-size: 20px; cursor: pointer; }
     </style>
 </head>
@@ -19,42 +16,32 @@
     <div id="wrapper">
         <div id="menuContainer">
             <h1>チェイスの パウパト・アクション！</h1>
-            <div id="buttons">
-                <button onclick="window.location.href='javascript:void(0); console.log(\'chase\');'">チェイス</button>
-                <button onclick="window.location.href='javascript:void(0); console.log(\'marshall\');'">マーシャル</button>
-                <br>
-                <button onclick="debugStart()">ゲームスタート</button>
-            </div>
+            <button onclick="debugStart()">ゲームスタート</button>
         </div>
         <canvas id="gameCanvas" width="800" height="400"></canvas>
     </div>
 
     <script>
-    function debugStart() {
-        console.log("スタートボタン押下");
-        document.getElementById("menuContainer").style.display = "none";
-
-        try {
-            // 初期化処理
-            if (typeof initGame === 'function') {
-                initGame();
-                console.log("initGame完了");
-            } else {
-                throw new Error("initGame関数が見つかりません");
-            }
-
-            // ゲームループ
-            if (typeof gameLoop === 'function') {
-                gameLoop();
-                console.log("gameLoop開始");
-            } else {
-                throw new Error("gameLoop関数が見つかりません");
-            }
-        } catch (e) {
-            alert("ゲーム開始エラー: " + e.message);
-            console.error(e);
+        // ゲーム開始時に呼ばれる関数をここに定義
+        function initGame() {
+            console.log("初期化開始");
+            // ここに、本来のゲームの初期化処理（変数のリセットなど）を書いてください
+            // もし何もないなら、とりあえず空のままでもエラーは消えます
         }
-    }
+
+        function gameLoop() {
+            console.log("ゲームループ開始");
+            // ここにゲームの描画ループ処理を書いてください
+        }
+
+        function debugStart() {
+            console.log("スタートボタン押下");
+            document.getElementById("menuContainer").style.display = "none";
+            
+            // 関数を定義したので、ここで実行されます
+            initGame();
+            gameLoop();
+        }
 </script>
 </body>
 </html>
