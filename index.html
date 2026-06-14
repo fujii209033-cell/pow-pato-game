@@ -1,73 +1,39 @@
+パウパトロールゲーム20260614時点完成版
+<仕様>
+チェイスを操作して障害物をジャンプで避けながらクッキー集めてパウステーションに到着
+かんたんとむずかしいの難易度がある
+
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>パウパト・アクション</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>チェイスのパウパト・アクション（クリア時バク宙エフェクト版）</title>
     <style>
-        body { margin: 0; background: #87CEEB; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        #wrapper { position: relative; width: 800px; height: 400px; }
-        canvas { display: block; background: #87CEEB; }
-        #menuContainer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
-        button { padding: 20px; font-size: 20px; cursor: pointer; }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
+        canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
+        .menu-container { position: absolute; display: flex; gap: 20px; top: 65%; left: 50%; transform: translateX(-50%); z-index: 10; }
+        .mode-btn { padding: 12px 24px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 0 #999; transition: 0.1s; white-space: nowrap; }
+        .mode-btn:active { transform: translateY(4px); box-shadow: none; }
+        #easyBtn { background-color: #4ADE80; color: white; box-shadow: 0 4px 0 #166534; }
+        #hardBtn { background-color: #F87171; color: white; box-shadow: 0 4px 0 #991B1B; }
     </style>
 </head>
 <body>
-    <div id="wrapper">
-        <div id="menuContainer">
-            <h1>チェイスの パウパト・アクション！</h1>
-            <button onclick="debugStart()">ゲームスタート</button>
-        </div>
-        <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <div class="menu-container" id="menuContainer">
+        <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん</button>
+        <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい</button>
     </div>
 
-    <script>
-        <script>
-    // ゲーム開始関数
-    function debugStart() {
-        console.log("ゲームスタート押下");
-        
-        // 1. メニューを消す
-        const menu = document.getElementById("menuContainer");
-        if(menu) menu.style.display = "none";
-        
-        // 2. エラーを捕捉しながら実行
-        try {
-            // ここに、あなたのゲーム本編のコード（initGameやgameLoop）を定義する必要があります
-            // 以下は、ゲームが確実に開始されるか確認するためのテストです
-            if (typeof initGame === 'function') {
-                initGame();
-            } else {
-                console.warn("initGame関数が定義されていません");
-            }
-            
-            if (typeof gameLoop === 'function') {
-                gameLoop();
-                console.log("gameLoop開始成功");
-            } else {
-                alert("エラー: gameLoop関数が見つかりません");
-            }
-        } catch (e) {
-            alert("エラー発生: " + e.message);
-            console.error(e);
-        }
-    }
-</script>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
 
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-
-
-
-}// 初期タイトル描画
-function drawTitle() {
-    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, 800, 400);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 30px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("チェイスの パウパト・アクション！", 400, 100);
-    if (!gameStarted) requestAnimationFrame(drawTitle);
-}
-drawTitle();
-    
 // ==========================================
 // 🎵 1. オーディオ設定
 // ==========================================
@@ -141,13 +107,6 @@ const chase = {
     isGrounded: false 
 };
 const goal = { x: STAGE_WIDTH - 250, y: 120, width: 120, height: 200 }; 
-
-const characterData = {
-    chase: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" },
-    marshall: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
-};
-let selectedChar = 'chase'; 
-
 
 function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
@@ -308,66 +267,12 @@ function playSound(audio) { audio.currentTime = 0; audio.play().catch(() => {});
 // ==========================================
 // 🕹️ 4. 操作・ゲーム開始とリトライ
 // ==========================================
-
-// <script>タグ内の適当な位置に追加
-let titleAnimeTimer = 0;
-function updateTitleAnimation() {
-    if (gameStarted) return; // ゲーム開始後は止めます
-
-    titleAnimeTimer++;
-    let frameIndex = Math.floor(titleAnimeTimer / 10) % 2;
-    
-    // IDを取得
-    const imgChase = document.getElementById("img-chase");
-    const imgMarshall = document.getElementById("img-marshall");
-    
-    // 変更が必要な場合のみ書き換える（無限更新を防ぐ）
-    const newChaseSrc = frameIndex === 0 ? characterData.chase.run1 : characterData.chase.run2;
-    if (imgChase.src !== newChaseSrc) imgChase.src = newChaseSrc;
-    
-    const newMarshallSrc = frameIndex === 0 ? characterData.marshall.run1 : characterData.marshall.run2;
-    if (imgMarshall.src !== newMarshallSrc) imgMarshall.src = newMarshallSrc;
-        
-    requestAnimationFrame(updateTitleAnimation);
+function startGame(mode) {
+    if (gameStarted) return;
+    initGame(); gameMode = mode; gameStarted = true;
+    document.getElementById("menuContainer").style.display = "none";
+    playSound(bgm); playSound(voiceStart); gameLoop();
 }
-
-// タイトル画面表示時に実行
-updateTitleAnimation();
-
-function selectChar(char) {
-    selectedChar = char;
-    // 選択状態の見た目を変更
-    document.querySelectorAll('.char-btn').forEach(btn => btn.classList.remove('selected'));
-    document.getElementById('btn-' + char).classList.add('selected');
-}
-
-    // 既存の関数を上書きします
-    function startGame(mode) {
-        console.log("スタートボタン押下: " + mode);
-        
-        // メニューを消す
-        document.getElementById("menuContainer").style.display = "none";
-        
-        // 既存のゲーム開始処理を呼び出す
-        gameStarted = true;
-        gameMode = mode;
-        
-        // ゲームループの開始を保証する
-        if (typeof initGame === 'function') initGame();
-        if (typeof gameLoop === 'function') gameLoop();
-    }
-
-
-
-
-// 画像の読み込みエラーを無視する処理を <script> 内のどこかに追加
-window.addEventListener('error', (e) => {
-    if(e.target.tagName === 'IMG') {
-        e.target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-        console.log("画像が見つかりません。非表示にします。");
-    }
-}, true);
-
 
 function backToTitle() {
     gameStarted = false;
@@ -663,28 +568,25 @@ else {
     if (goalImg.complete && goalImg.width > 0) ctx.drawImage(goalImg, screenGoalX, goal.y, goal.width, goal.height);
     else { ctx.fillStyle = "#1E3A8A"; ctx.fillRect(screenGoalX, goal.y, goal.width, goal.height); }
 
-    // 5. チェイスの描画（サイズを強制的に固定）
-if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
-    let currentChaseImg = chaseFrames[0];
-    if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
-    else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
-    
-    ctx.save();
-    // 中心点を基準に回転
-    ctx.translate(chase.x + chase.width / 2, chase.y + chase.height / 2);
-    ctx.rotate(chaseRotation);
-    
-    if (currentChaseImg.complete && currentChaseImg.width > 0) {
-        // 【修正点】widthとheightを強制的にchase.width/heightで指定することでサイズを統一
-        ctx.drawImage(currentChaseImg, -chase.width / 2, -chase.height / 2, chase.width, chase.height);
-    } else { 
-        // 画像読み込み前やエラー時は青い四角で代用
-        ctx.fillStyle = "#0000FF";
-        ctx.fillRect(-chase.width / 2, -chase.height / 2, chase.width, chase.height); 
+    // 5. チェイスの描画（🛠️ 回転エフェクト対応版レンダラー）
+    if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
+        let currentChaseImg = chaseFrames[0];
+        if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
+        else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
+        
+        ctx.save();
+        // 🛠️ 画像の中心を回転の軸にするための座標移動
+        ctx.translate(chase.x + chase.width / 2, chase.y + chase.height / 2);
+        ctx.rotate(chaseRotation); // バク宙の角度を適用
+        
+        if (currentChaseImg.complete && currentChaseImg.width > 0) {
+            // 中心点を移動したため、描画座標は -width/2, -height/2 になる
+            ctx.drawImage(currentChaseImg, -chase.width / 2, -chase.height / 2, chase.width, chase.height);
+        } else { 
+            ctx.fillStyle = "#0000FF"; ctx.fillRect(-chase.width / 2, -chase.height / 2, chase.width, chase.height); 
+        }
+        ctx.restore();
     }
-    ctx.restore();
-}
-
 
     if (slipTimer > 0) {
         ctx.font = "20px sans-serif";
@@ -745,40 +647,12 @@ if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
     } else { requestAnimationFrame(gameLoop); }
 }
 
-// 現在の drawTitleScreen 関数を削除して、こちらに置き換えてください
 function drawTitleScreen() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height); // キャンバスをクリア
     ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#228B22";
-    ctx.fillRect(0, GROUND_Y_LINE, canvas.width, canvas.height - GROUND_Y_LINE);
+    ctx.fillStyle = "#228B22"; ctx.fillRect(0, GROUND_Y_LINE, canvas.width, canvas.height - GROUND_Y_LINE);
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, 100);
-    
-    if (!gameStarted) {
-        requestAnimationFrame(drawTitleScreen); // これを足すことでタイトル画面も描画し続ける
-    }
-}
-drawTitleScreen();
-
-// キャラクター選択ロジック
-let selectedChar = 'chase';
-const characterData = {
-    chase: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" },
-    marshall: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
-};
-
-function selectChar(char) {
-    selectedChar = char;
-    document.querySelectorAll('.char-btn').forEach(btn => btn.style.borderColor = "#ddd");
-    document.getElementById('btn-' + char).style.borderColor = "#FBBF24";
-}
-
-// ゲーム開始時にキャラクター画像を適用
-const chaseFrames = [new Image(), new Image(), new Image()];
-function applyCharacter() {
-    chaseFrames[0].src = characterData[selectedChar].run1;
-    chaseFrames[1].src = characterData[selectedChar].run2;
-    chaseFrames[2].src = characterData[selectedChar].jump;
+    ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, canvas.height / 2 - 60);
+    ctx.font = "18px sans-serif"; ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
 }
 drawTitleScreen();
 </script>
