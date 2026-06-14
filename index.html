@@ -3,51 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（クリア時バク宙エフェクト版）</title>
+    <title>チェイスのパウパト・アクション</title>
     <style>
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
-        body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; position: relative; }
-        #gameContainer { position: relative; width: 800px; height: 400px; }
+        body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        #gameWrapper { position: relative; width: 800px; height: 400px; }
         canvas { background-color: #87CEEB; display: block; }
-    /* ボタンコンテナをCanvasの上に重ねる */
-    .menu-container { 
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        gap: 20px; z-index: 100; background: rgba(135, 206, 235, 0.8); /* 背景を少し透明な空色に */
-    }
-    .char-btn { width: 80px; height: 80px; border: 4px solid #ddd; cursor: pointer; background: white; }
-    .char-btn.selected { border-color: #FBBF24; }
-    .char-btn img { width: 100%; height: 100%; object-fit: contain; }
-
-
-     </style>
+        
+        .menu-container { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            gap: 20px; z-index: 100; background: rgba(135, 206, 235, 0.9);
+        }
+        .char-btn { width: 80px; height: 80px; border: 4px solid #ddd; cursor: pointer; background: white; border-radius: 10px; }
+        .char-btn.selected { border-color: #FBBF24; }
+        .char-btn img { width: 100%; height: 100%; object-fit: contain; }
+        .mode-btn { padding: 15px 30px; font-size: 20px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; }
+    </style>
 </head>
-/* ボタンコンテナをCanvasの上に重ねる */
-    .menu-container { 
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        gap: 20px; z-index: 100; background: rgba(135, 206, 235, 0.8); /* 背景を少し透明な空色に */
-    }
-    .char-btn { width: 80px; height: 80px; border: 4px solid #ddd; cursor: pointer; background: white; }
-    .char-btn.selected { border-color: #FBBF24; }
-    .char-btn img { width: 100%; height: 100%; object-fit: contain; }
+<body>
+
+<div id="gameWrapper">
+    <div class="menu-container" id="menuContainer">
+        <div style="display: flex; gap: 20px;">
+            <button class="char-btn selected" id="btn-chase" onclick="selectChar('chase')">
+                <img src="images/chase_run1.png">
+            </button>
+            <button class="char-btn" id="btn-marshall" onclick="selectChar('marshall')">
+                <img src="images/marshall_run1.png" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='">
+            </button>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="mode-btn" style="background:#4ADE80; color:white;" onclick="startGame('easy')">かんたん</button>
+            <button class="mode-btn" style="background:#F87171; color:white;" onclick="startGame('hard')">むずかしい</button>
+        </div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+</div>
+
 <script>
+// --- 基本変数 ---
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-
-// 選択時の関数を以下のようにデバッグ出力付きに書き換えてみる
+let gameStarted = false;
+let selectedChar = 'chase';
+    
+// --- キャラクタ選択 ---
 function selectChar(char) {
     selectedChar = char;
-    // 選択状態の見た目を変更
     document.querySelectorAll('.char-btn').forEach(btn => btn.classList.remove('selected'));
     document.getElementById('btn-' + char).classList.add('selected');
+}
     
     // 画像を強制的に再読み込み（キャッシュ対策でランダムなクエリをつける場合もあります）
     document.getElementById("img-chase").src = characterData['chase'].run1;
     document.getElementById("img-marshall").src = characterData['marshall'].run1;
 }
 
+// --- スタート処理 ---
+function startGame(mode) {
+    if (gameStarted) return;
+    gameStarted = true;
+    document.getElementById("menuContainer").style.display = "none";
+    // ここで initGame() や gameLoop() を呼び出す
+    initGame();
+    gameMode = mode;
+    gameLoop();
+}
 
+// 初期タイトル描画
+function drawTitle() {
+    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, 800, 400);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 30px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("チェイスの パウパト・アクション！", 400, 100);
+    if (!gameStarted) requestAnimationFrame(drawTitle);
+}
+drawTitle();
+    
 // ==========================================
 // 🎵 1. オーディオ設定
 // ==========================================
