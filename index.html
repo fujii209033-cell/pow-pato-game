@@ -5,89 +5,77 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>パウパト・アクション</title>
     <style>
-        body { margin: 0; background: #87CEEB; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        /* 画面全体の設定 */
+        body { margin: 0; padding: 0; background: #87CEEB; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        
+        /* ゲーム全体を囲う箱 */
         #gameWrapper { position: relative; width: 800px; height: 400px; }
+        
+        /* キャンバス */
         canvas { display: block; background: #87CEEB; }
         
-        /* 完全に独立したメニューレイヤー */
+        /* メニュー（ボタン）はCanvasの外に配置して遮断を防ぐ */
         #menuContainer { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             gap: 20px; z-index: 9999; background: #87CEEB;
         }
-        .btn-row { display: flex; gap: 20px; }
-        button { padding: 15px 30px; font-size: 20px; font-weight: bold; cursor: pointer; border-radius: 10px; border: 2px solid #333; }
+        
+        .btn-group { display: flex; gap: 20px; }
+        button { padding: 20px 40px; font-size: 24px; font-weight: bold; cursor: pointer; border-radius: 15px; border: 3px solid #333; touch-action: manipulation; }
     </style>
 </head>
 <body>
 
-<div id="wrapper" style="position:relative; width:800px; height:400px; margin:0 auto;">
-    <canvas id="gameCanvas" width="800" height="400" style="background:#87CEEB;"></canvas>
-
-    <div id="menuContainer" style="position:absolute; top:0; left:0; width:800px; height:400px; background:#87CEEB; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;">
-        <h1 style="color:white;">チェイスの パウパト・アクション！</h1>
-        <div style="display:flex; gap:20px;">
-            <button onclick="selectChar('chase')" style="padding:15px; cursor:pointer;">チェイス</button>
-            <button onclick="selectChar('marshall')" style="padding:15px; cursor:pointer;">マーシャル</button>
+<div id="gameWrapper">
+    <div id="menuContainer">
+        <h1 style="color: white; font-size: 32px;">チェイスの パウパト・アクション！</h1>
+        <div class="btn-group">
+            <button onclick="selectChar('chase')">チェイス</button>
+            <button onclick="selectChar('marshall')">マーシャル</button>
         </div>
-        <div style="display:flex; gap:20px;">
-            <button onclick="startGame('easy')" style="padding:15px; cursor:pointer;">かんたん</button>
-            <button onclick="startGame('hard')" style="padding:15px; cursor:pointer;">むずかしい</button>
+        <div class="btn-group">
+            <button onclick="startGame('easy')" style="background:#90EE90;">かんたん</button>
+            <button onclick="startGame('hard')" style="background:#FF9999;">むずかしい</button>
         </div>
     </div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
 </div>
 
-
 <script>
-// 【デバッグコード】まずこれをscriptの先頭に書いてください
-window.startGame = function(mode) {
-    console.log("ボタンがクリックされました！モード: " + mode);
-    alert("ボタン反応しました！モード: " + mode); // iPhoneで確認用
-    
-    // 画面を隠す
-    const menu = document.getElementById("menuContainer");
-    if (menu) menu.style.display = "none";
-    
-    // ゲーム開始のための強制実行
-    try {
-        if (typeof initGame === 'function') {
-            initGame();
-            console.log("initGame実行完了");
-        }
-        if (typeof gameLoop === 'function') {
-            gameLoop();
-            console.log("gameLoop実行完了");
-        } else {
-            console.error("gameLoopが見つかりません");
-        }
-    } catch (e) {
-        console.error("エラー発生: " + e.message);
-        alert("エラー: " + e.message);
-    }
-};
-
-
     let gameStarted = false;
     let selectedChar = 'chase';
 
+    // デバッグ用：ボタンが押されたら必ず反応するようにする
     function selectChar(char) {
         selectedChar = char;
         console.log("キャラ選択: " + char);
+        alert("キャラを " + char + " にしました");
     }
 
     function startGame(mode) {
         if (gameStarted) return;
-        gameStarted = true;
         
-        // メニューを完全に非表示にする
+        // デバッグ用：スタートボタンの反応を確認
+        console.log("スタートボタン押下: " + mode);
+        
+        // メニューを消す
         document.getElementById("menuContainer").style.display = "none";
         
-        // ゲーム開始 (既存の関数を呼び出す)
-        if (typeof initGame === 'function') initGame();
-        gameMode = mode;
-        if (typeof gameLoop === 'function') gameLoop();
-        console.log("ゲームスタート！モード: " + mode);
+        try {
+            // 既存のゲーム開始処理を呼び出す
+            if (typeof initGame === 'function') initGame();
+            gameStarted = true;
+            gameMode = mode;
+            if (typeof gameLoop === 'function') gameLoop();
+            
+            console.log("ゲームループ開始!");
+        } catch (e) {
+            alert("エラー発生: " + e.message);
+            console.error(e);
+        }
     }
+
 
 
 }// 初期タイトル描画
