@@ -22,24 +22,22 @@
 </head>
 <body>
 
-<div id="gameWrapper">
-    <div class="menu-container" id="menuContainer">
-        <div style="font-size: 24px; font-weight: bold; color: white;">チェイスの パウパト・アクション！</div>
-        <div style="display: flex; gap: 20px;">
-            <button class="char-btn selected" id="btn-chase" onclick="selectChar('chase')">
-                <img src="images/chase_run1.png">
-            </button>
-            <button class="char-btn" id="btn-marshall" onclick="selectChar('marshall')">
-                <img src="images/marshall_run1.png">
-            </button>
+<body>
+    <div id="menuContainer" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#87CEEB; z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px;">
+        <div style="font-size:24px; color:white; font-weight:bold;">チェイスの パウパト・アクション！</div>
+        <div style="display:flex; gap:20px;">
+            <button id="btn-chase" onclick="selectChar('chase')" style="border:4px solid #FBBF24; padding:10px;">チェイス</button>
+            <button id="btn-marshall" onclick="selectChar('marshall')" style="border:4px solid #ddd; padding:10px;">マーシャル</button>
         </div>
-        <div style="display: flex; gap: 10px;">
-            <button class="mode-btn" style="background:#4ADE80;" onclick="startGame('easy')">かんたん</button>
-            <button class="mode-btn" style="background:#F87171;" onclick="startGame('hard')">むずかしい</button>
+        <div style="display:flex; gap:10px;">
+            <button onclick="startGame('easy')" style="padding:15px 30px; font-size:20px;">かんたん</button>
+            <button onclick="startGame('hard')" style="padding:15px 30px; font-size:20px;">むずかしい</button>
         </div>
     </div>
+    
     <canvas id="gameCanvas" width="800" height="400"></canvas>
-</div>
+
+
 
 <script>
     const canvas = document.getElementById("gameCanvas");
@@ -54,20 +52,20 @@
     }
 
     function startGame(mode) {
-        if (gameStarted) return;
-        gameStarted = true;
-        
-        // メニューを隠す
-        document.getElementById("menuContainer").style.display = "none";
-        
-        // ゲーム開始のための初期化ロジック
-        initGame(); // 元のコードのinitGameを実行
-        gameMode = mode;
-        
-        // 念のため、ブラウザが描画ループを停止していないか強制的に再開
-        console.log("ゲーム開始: " + mode);
-        gameLoop(); 
-    }
+    // ボタンのクリックを確実に検知するためのログ
+    console.log("スタートボタンが押されました: " + mode);
+    
+    // 画面からメニューを完全に削除
+    const menu = document.getElementById("menuContainer");
+    if(menu) menu.style.display = "none";
+    
+    gameStarted = true;
+    gameMode = mode;
+    
+    // ゲームの開始
+    initGame();
+    gameLoop();
+}
 
   
 
