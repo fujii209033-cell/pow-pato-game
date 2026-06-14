@@ -630,25 +630,28 @@ else {
     if (goalImg.complete && goalImg.width > 0) ctx.drawImage(goalImg, screenGoalX, goal.y, goal.width, goal.height);
     else { ctx.fillStyle = "#1E3A8A"; ctx.fillRect(screenGoalX, goal.y, goal.width, goal.height); }
 
-    // 5. チェイスの描画（🛠️ 回転エフェクト対応版レンダラー）
-    if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
-        let currentChaseImg = chaseFrames[0];
-        if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
-        else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
-        
-        ctx.save();
-        // 🛠️ 画像の中心を回転の軸にするための座標移動
-        ctx.translate(chase.x + chase.width / 2, chase.y + chase.height / 2);
-        ctx.rotate(chaseRotation); // バク宙の角度を適用
-        
-        if (currentChaseImg.complete && currentChaseImg.width > 0) {
-            // 中心点を移動したため、描画座標は -width/2, -height/2 になる
-            ctx.drawImage(currentChaseImg, -chase.width / 2, -chase.height / 2, chase.width, chase.height);
-        } else { 
-            ctx.fillStyle = "#0000FF"; ctx.fillRect(-chase.width / 2, -chase.height / 2, chase.width, chase.height); 
-        }
-        ctx.restore();
+    // 5. チェイスの描画（サイズを強制的に固定）
+if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
+    let currentChaseImg = chaseFrames[0];
+    if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
+    else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
+    
+    ctx.save();
+    // 中心点を基準に回転
+    ctx.translate(chase.x + chase.width / 2, chase.y + chase.height / 2);
+    ctx.rotate(chaseRotation);
+    
+    if (currentChaseImg.complete && currentChaseImg.width > 0) {
+        // 【修正点】widthとheightを強制的にchase.width/heightで指定することでサイズを統一
+        ctx.drawImage(currentChaseImg, -chase.width / 2, -chase.height / 2, chase.width, chase.height);
+    } else { 
+        // 画像読み込み前やエラー時は青い四角で代用
+        ctx.fillStyle = "#0000FF";
+        ctx.fillRect(-chase.width / 2, -chase.height / 2, chase.width, chase.height); 
     }
+    ctx.restore();
+}
+
 
     if (slipTimer > 0) {
         ctx.font = "20px sans-serif";
