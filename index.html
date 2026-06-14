@@ -37,6 +37,34 @@
 </div>
 
 <script>
+// 【デバッグコード】まずこれをscriptの先頭に書いてください
+window.startGame = function(mode) {
+    console.log("ボタンがクリックされました！モード: " + mode);
+    alert("ボタン反応しました！モード: " + mode); // iPhoneで確認用
+    
+    // 画面を隠す
+    const menu = document.getElementById("menuContainer");
+    if (menu) menu.style.display = "none";
+    
+    // ゲーム開始のための強制実行
+    try {
+        if (typeof initGame === 'function') {
+            initGame();
+            console.log("initGame実行完了");
+        }
+        if (typeof gameLoop === 'function') {
+            gameLoop();
+            console.log("gameLoop実行完了");
+        } else {
+            console.error("gameLoopが見つかりません");
+        }
+    } catch (e) {
+        console.error("エラー発生: " + e.message);
+        alert("エラー: " + e.message);
+    }
+};
+
+
     let gameStarted = false;
     let selectedChar = 'chase';
 
