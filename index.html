@@ -38,20 +38,21 @@
 </head>
 <body>
 
-   <div class="menu-container" id="menuContainer">
-    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-        <button class="char-btn" id="btn-chase" onclick="selectChar('chase')">
-            <img src="images/chase_run1.png" id="img-chase">
-        </button>
-        <button class="char-btn" id="btn-marshall" onclick="selectChar('marshall')">
-            <img src="images/marshall_run1.png" id="img-marshall">
-        </button>
-    </div>
-    <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん</button>
-    <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい</button>
-</div>
+       <div class="menu-container" id="menuContainer">
+        <div style="display: flex; gap: 15px; margin-bottom: 20px; justify-content: center;">
+            <button class="char-btn" id="btn-chase" onclick="selectChar('chase')" style="border: 3px solid #FBBF24;">
+                <img src="images/chase_run1.png" id="img-chase" style="width:60px; height:60px; object-fit:contain;">
+            </button>
+            <button class="char-btn" id="btn-marshall" onclick="selectChar('marshall')">
+                <img src="images/marshall_run1.png" id="img-marshall" style="width:60px; height:60px; object-fit:contain;">
+            </button>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん</button>
+            <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい</button>
+        </div>
+       </div>
 
-</div>
 
 
     <canvas id="gameCanvas" width="800" height="400"></canvas>
@@ -349,18 +350,16 @@ function selectChar(char) {
 // 220行目付近のstartGame関数を修正
 function startGame(mode) {
     if (gameStarted) return;
-    initGame(); gameMode = mode;
-    
-    // ★ここから追加（画像パスの切り替え）★
-    chaseFrames[0].src = characterData[selectedChar].run1;
-    chaseFrames[1].src = characterData[selectedChar].run2;
-    chaseFrames[2].src = characterData[selectedChar].jump;
-    // ★ここまで追加★
-
+    initGame(); 
+    gameMode = mode;
+    applyCharacter(); // ★ここを追加：選んだキャラの画像をセットする
     gameStarted = true;
     document.getElementById("menuContainer").style.display = "none";
-    playSound(bgm); playSound(voiceStart); gameLoop();
+    playSound(bgm); 
+    playSound(voiceStart); 
+    gameLoop();
 }
+
 
 
 function backToTitle() {
@@ -745,6 +744,26 @@ function drawTitleScreen() {
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
     ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, canvas.height / 2 - 60);
     ctx.font = "18px sans-serif"; ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
+}
+// キャラクター選択ロジック
+let selectedChar = 'chase';
+const characterData = {
+    chase: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" },
+    marshall: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
+};
+
+function selectChar(char) {
+    selectedChar = char;
+    document.querySelectorAll('.char-btn').forEach(btn => btn.style.borderColor = "#ddd");
+    document.getElementById('btn-' + char).style.borderColor = "#FBBF24";
+}
+
+// ゲーム開始時にキャラクター画像を適用
+const chaseFrames = [new Image(), new Image(), new Image()];
+function applyCharacter() {
+    chaseFrames[0].src = characterData[selectedChar].run1;
+    chaseFrames[1].src = characterData[selectedChar].run2;
+    chaseFrames[2].src = characterData[selectedChar].jump;
 }
 drawTitleScreen();
 </script>
