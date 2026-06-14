@@ -54,6 +54,16 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// 選択時の関数を以下のようにデバッグ出力付きに書き換えてみる
+function selectChar(char) {
+    selectedChar = char;
+    console.log("選択されたキャラ:", char);
+    console.log("画像パス:", characterData[char]); // ここでパスが正しく取得できているか確認
+    
+    document.querySelectorAll('.char-btn').forEach(btn => btn.classList.remove('selected'));
+    document.getElementById('btn-' + char).classList.add('selected');
+}
+
 // ==========================================
 // 🎵 1. オーディオ設定
 // ==========================================
