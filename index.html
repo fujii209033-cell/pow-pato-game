@@ -48,8 +48,8 @@ const CHARACTER_CONFIG = {
     chase: {
         name: "チェイス",
         color: "#1E3A8A",
-        speed: 5,
-        jumpPower: 12,
+        baseSpeed: 5.5,    // 滑らかなテンポのためにベース速度を微調整
+        jumpPower: 13.5,   // より気持ちの良い放物線になるよう調整
         images: {
             run1: "images/chase_run1.png",
             run2: "images/chase_run2.png",
@@ -59,8 +59,8 @@ const CHARACTER_CONFIG = {
     marshall: {
         name: "マーシャル",
         color: "#DC2626",
-        speed: 4.5,
-        jumpPower: 13,
+        baseSpeed: 5.0,
+        jumpPower: 14.5,
         images: {
             run1: "images/marshall_run1.png",
             run2: "images/marshall_run2.png",
@@ -69,22 +69,45 @@ const CHARACTER_CONFIG = {
     }
 };
 
-// 選択されたキャラクター情報を保持する変数
 let selectedCharKey = 'chase'; 
 
 // --- 画像アセットの管理 ---
-const imgAssets = {};
-// 全キャラクターの全画像をループで読み込み
+const imgAssets = {
+    chars: {},
+    items: {},
+    obstacles: {}
+};
+
+// キャラクター画像の読み込み
 Object.keys(CHARACTER_CONFIG).forEach(charKey => {
-    imgAssets[charKey] = {};
+    imgAssets.chars[charKey] = {};
     Object.keys(CHARACTER_CONFIG[charKey].images).forEach(imgKey => {
-        imgAssets[charKey][imgKey] = new Image();
-        imgAssets[charKey][imgKey].src = CHARACTER_CONFIG[charKey].images[imgKey];
+        imgAssets.chars[charKey][imgKey] = new Image();
+        imgAssets.chars[charKey][imgKey].src = CHARACTER_CONFIG[charKey].images[imgKey];
     });
 });
 
+// クッキーとゴールの画像読み込み
+imgAssets.items.cookie = new Image();
+imgAssets.items.cookie.src = "images/cookie.png";
+imgAssets.items.pawStation = new Image();
+imgAssets.items.pawStation.src = "images/paw_station.png";
+
+// 障害物画像の読み込み
+const obstacleImages = {
+    car: "images/car.png",
+    box: "images/box.png",
+    cone: "images/cone.png",
+    cat: "images/cat.png",
+    puddle: "images/puddle.png"
+};
+Object.keys(obstacleImages).forEach(key => {
+    imgAssets.obstacles[key] = new Image();
+    imgAssets.obstacles[key].src = obstacleImages[key];
+});
+
 // --- アニメーション用タイマー ---
-let gameFrame = 0; // ループ毎に1ずつ増えるカウンター
+let gameFrame = 0; 
 
 // --- ゲームスコアとランキング ---
 let score = 0;
@@ -94,17 +117,21 @@ let ranking = [15, 10, 5];
 let player = {
     x: 100,
     y: 250,
-    width: 50,
-    height: 50,
+    width: 60,   // 画像が見映えするよう少しサイズ調整
+    height: 60,
     vy: 0,
-    gravity: 0.6,
-    isJumping: false
+    gravity: 0.65, // ジャンプが引き締まるよう重力を少し強めに
+    isJumping: false,
+    invincibleTimer: 0, // 無敵時間の残りフレーム数
+    speedModifier: 1.0  // 水たまり用の速度倍率
 };
+
+const GROUND_Y = 240; // キャラクターが設置する地面のY座標 (400 - 地面厚み100 - キャラ高さ60)
 
 // --- ステージ要素の配列 ---
 let cookies = [];
 let obstacles = [];
-let goalX = 3000; 
+let goalX = 3500; 
 let cameraX = 0;
 
 // --- ゲームの初期化関数 ---
@@ -112,55 +139,86 @@ function initGame() {
     score = 0;
     cameraX = 0;
     player.x = 100;
-    player.y = 250;
+    player.y = GROUND_Y;
     player.vy = 0;
     player.isJumping = false;
+    player.invincibleTimer = 0;
+    player.speedModifier = 1.0;
 
     // クッキーの配置
     cookies = [];
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 20; i++) {
         cookies.push({
-            x: 400 + i * 180 + Math.random() * 50,
-            y: 200 + Math.random() * 80,
-            width: 25,
-            height: 25,
+            x: 400 + i * 160 + Math.random() * 40,
+            y: GROUND_Y - 40 - Math.random() * 80,
+            width: 30,
+            height: 30,
             collected: false
         });
     }
 
     // 障害物の配置
     obstacles = [];
-    for (let i = 0; i < 6; i++) {
-        let type = Math.random() > 0.5 ? 'pit' : 'rock'; 
+    const types = ['car', 'box', 'cone', 'cat', 'puddle', 'pit'];
+    for (let i = 0; i < 8; i++) {
+        let type = types[Math.floor(Math.random() * types.length)];
+        let obsWidth = 50;
+        let obsHeight = 50;
+        let obsY = GROUND_Y;
+
+        if (type === 'car') { obsWidth = 70; obsHeight = 45; obsY = GROUND_Y + 15; }
+        else if (type === 'box') { obsWidth = 50; obsHeight = 50; obsY = GROUND_Y + 10; }
+        else if (type === 'cone') { obsWidth = 40; obsHeight = 45; obsY = GROUND_Y + 15; }
+        else if (type === 'cat') { obsWidth = 50; obsHeight = 50; obsY = GROUND_Y + 10; }
+        else if (type === 'puddle') { obsWidth = 70; obsHeight = 15; obsY = GROUND_Y + 45; } // 地面に張り付く
+        else if (type === 'pit') { obsWidth = 80; obsHeight = 100; obsY = GROUND_Y + 40; } // 落とし穴
+
         obstacles.push({
-            x: 600 + i * 400 + Math.random() * 100,
-            y: type === 'rock' ? 260 : 300, 
-            width: type === 'rock' ? 40 : 60,
-            height: type === 'rock' ? 40 : 100,
+            x: 500 + i * 380 + Math.random() * 80,
+            y: obsY,
+            width: obsWidth,
+            height: obsHeight,
             type: type
         });
     }
 }
 
+// 被弾（ダメージ）時の共通処理：クッキーを1つ落として2秒間（120フレーム）無敵化
+function triggerDamage() {
+    if (player.invincibleTimer > 0) return; // すでに無敵なら無視
+    
+    if (score > 0) {
+        score--; // クッキーを1つ落とす
+    }
+    player.invincibleTimer = 120; // 60fps想定で2秒間
+}
+
 // --- 更新処理（プレイ画面用） ---
 function update() {
-    // 画面状態に関わらず、フレームカウンターは常に進める（アニメーション用）
     gameFrame++;
 
     if (currentState !== STATES.PLAY) return;
 
     const charConfig = CHARACTER_CONFIG[selectedCharKey];
 
-    // プレイヤーの自動前進
-    player.x += charConfig.speed;
+    // 無敵タイマーのカウントダウン
+    if (player.invincibleTimer > 0) {
+        player.invincibleTimer--;
+    }
 
-    // 重力とジャンプ処理
+    // 水たまりによる減速チェック（毎フレーム初期化して判定）
+    player.speedModifier = 1.0; 
+
+    // プレイヤーの移動（ベース速度 × 水たまり倍率）
+    player.x += charConfig.baseSpeed * player.speedModifier;
+
+    // 重力とジャンプの物理演算
     player.vy += player.gravity;
     player.y += player.vy;
 
-    // 地面での接地判定
-    if (player.y >= 250) {
-        player.y = 250;
+    // 通常の地面との接地判定
+    if (player.y >= GROUND_Y) {
+        player.y = GROUND_Y;
         player.vy = 0;
         player.isJumping = false;
     }
@@ -182,21 +240,47 @@ function update() {
 
     // 障害物との当たり判定
     obstacles.forEach(obs => {
-        if (player.x < obs.x + obs.width &&
-            player.x + player.width > obs.x &&
-            player.y < obs.y + obs.height &&
-            player.y + player.height > obs.y) {
-            
-            if (obs.type === 'pit') {
-                endGame();
+        // 衝突判定（AABB）
+        let isColliding = player.x < obs.x + obs.width &&
+                          player.x + player.width > obs.x &&
+                          player.y < obs.y + obs.height &&
+                          player.y + player.height > obs.y;
+
+        if (!isColliding) return;
+
+        // ①②③ 踏みつけ可能な障害物 (車, 箱, コーン)
+        if (obs.type === 'car' || obs.type === 'box' || obs.type === 'cone') {
+            // プレイヤーの足元が障害物の上のラインに近い、かつ落下中なら「踏みつけ」
+            if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 15) {
+                player.y = obs.y - player.height;
+                player.vy = 0;
+                player.isJumping = false; // ここから再ジャンプ可能に
             } else {
-                obs.x = -1000; 
-                score = Math.max(0, score - 1);
+                // 横からぶつかった場合は無敵でなければダメージ
+                if (player.invincibleTimer === 0) triggerDamage();
+            }
+        } 
+        // ④ ニャンパト（踏んではダメ）
+        else if (obs.type === 'cat') {
+            if (player.invincibleTimer === 0) triggerDamage();
+        } 
+        // ⑤ 水たまり（触れると足が遅くなる・無敵関係なし）
+        else if (obs.type === 'puddle') {
+            player.speedModifier = 0.5; // スピード半分
+        }
+        // ⑥ 落とし穴
+        else if (obs.type === 'pit') {
+            if (player.invincibleTimer === 0) {
+                triggerDamage();
+                // 3歳児向け救済：穴に落ちたら少し手前の地上に安全に復帰させる
+                player.x = obs.x - 80;
+                player.y = GROUND_Y;
+                player.vy = 0;
             }
         }
     });
 
-    // ゴール到達判定
+    // ゴール（パウステーション）到達判定
     if (player.x >= goalX) {
         endGame();
     }
@@ -204,6 +288,7 @@ function update() {
 
 // ジャンプ動作の発火
 function triggerJump() {
+    // 地面、または踏める障害物の上にいる（vyが0）の時にジャンプ可能
     if (!player.isJumping) {
         const charConfig = CHARACTER_CONFIG[selectedCharKey];
         player.vy = -charConfig.jumpPower; 
@@ -282,9 +367,8 @@ function drawSelectButton(key, rect, config) {
     ctx.roundRect(rect.x + 8, rect.y + 8, rect.width - 16, rect.height - 16, 15);
     ctx.fill();
 
-    // キャラ選択画面でのアニメーション（15フレームごとにrun1とrun2を交互に切り替え）
     let currentImgKey = (Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2';
-    let img = imgAssets[key][currentImgKey];
+    let img = imgAssets.chars[key][currentImgKey];
 
     if (img && img.complete) {
         ctx.drawImage(img, rect.x + rect.width/2 - 40, rect.y + 20, 80, 80);
@@ -306,73 +390,93 @@ function drawPlayScreen() {
     ctx.fillStyle = "#87CEEB";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    ctx.fillStyle = "#22C55E"; 
-    ctx.fillRect(0, 300, canvas.width, 100);
+    ctx.fillStyle = "#22C55E"; // 緑の地面
+    ctx.fillRect(0, GROUND_Y + 60, canvas.width, 100);
 
     ctx.save();
     ctx.translate(-cameraX, 0);
 
     // 障害物の描画
     obstacles.forEach(obs => {
-        if (obs.type === 'rock') {
-            ctx.fillStyle = "#78716C"; 
-            ctx.beginPath();
-            ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10);
-            ctx.fill();
-        } else if (obs.type === 'pit') {
-            ctx.fillStyle = "#87CEEB"; 
-            ctx.fillRect(obs.x, 300, obs.width, 100);
+        if (obs.type === 'pit') {
+            ctx.fillStyle = "#87CEEB"; // 空の色で穴を表現
+            ctx.fillRect(obs.x, GROUND_Y + 60, obs.width, 100);
+        } else {
+            let obsImg = imgAssets.obstacles[obs.type];
+            if (obsImg && obsImg.complete) {
+                ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height);
+            } else {
+                // 画像がない場合の仮描画
+                ctx.fillStyle = obs.type === 'cat' ? '#F59E0B' : '#6B7280';
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            }
         }
     });
 
-    // クッキーの描画
+    // クッキー（おやつ）の描画
     cookies.forEach(cookie => {
         if (!cookie.collected) {
-            ctx.fillStyle = "#D97706"; 
-            ctx.beginPath();
-            ctx.arc(cookie.x + 12, cookie.y + 12, 12, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#451A03";
-            ctx.fillRect(cookie.x + 6, cookie.y + 6, 3, 3);
-            ctx.fillRect(cookie.x + 14, cookie.y + 8, 3, 3);
-            ctx.fillRect(cookie.x + 10, cookie.y + 14, 3, 3);
+            let cookieImg = imgAssets.items.cookie;
+            if (cookieImg && cookieImg.complete) {
+                ctx.drawImage(cookieImg, cookie.x, cookie.y, cookie.width, cookie.height);
+            } else {
+                ctx.fillStyle = "#D97706"; 
+                ctx.beginPath();
+                ctx.arc(cookie.x + 15, cookie.y + 15, 15, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     });
 
-    // ゴールの描画
-    ctx.fillStyle = "#EF4444";
-    ctx.fillRect(goalX, 100, 80, 200); 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText("パウステーション", goalX + 40, 90);
-
-    // --- プレイヤーのアニメーション分け ---
-    let activeImgKey = 'run1';
-    if (player.isJumping) {
-        // ジャンプ中は固定でjump画像
-        activeImgKey = 'jump';
+    // ゴール（パウステーション）の描画
+    let stationImg = imgAssets.items.pawStation;
+    if (stationImg && stationImg.complete) {
+        ctx.drawImage(stationImg, goalX, GROUND_Y - 140, 150, 200);
     } else {
-        // 地面にいる時は、10フレームごとにrun1とrun2をパタパタ切り替え
-        activeImgKey = (Math.floor(gameFrame / 10) % 2 === 0) ? 'run1' : 'run2';
+        ctx.fillStyle = "#EF4444";
+        ctx.fillRect(goalX, GROUND_Y - 140, 120, 200);
     }
 
-    let pImg = imgAssets[selectedCharKey][activeImgKey];
-    const charConfig = CHARACTER_CONFIG[selectedCharKey];
+    // プレイヤーの描画（無敵時間はピカピカ点滅させる）
+    let shouldDrawPlayer = true;
+    if (player.invincibleTimer > 0 && Math.floor(player.invincibleTimer / 4) % 2 === 0) {
+        shouldDrawPlayer = false; // 4フレームごとに非表示にして点滅を表現
+    }
 
-    if (pImg && pImg.complete) {
-        ctx.drawImage(pImg, player.x, player.y, player.width, player.height);
-    } else {
-        ctx.fillStyle = charConfig.color;
-        ctx.fillRect(player.x, player.y, player.width, player.height);
+    if (shouldDrawPlayer) {
+        let activeImgKey = 'run1';
+        if (player.isJumping) {
+            activeImgKey = 'jump';
+        } else {
+            activeImgKey = (Math.floor(gameFrame / 10) % 2 === 0) ? 'run1' : 'run2';
+        }
+
+        let pImg = imgAssets.chars[selectedCharKey][activeImgKey];
+        const charConfig = CHARACTER_CONFIG[selectedCharKey];
+
+        if (pImg && pImg.complete) {
+            ctx.drawImage(pImg, player.x, player.y, player.width, player.height);
+        } else {
+            ctx.fillStyle = charConfig.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
     }
 
     ctx.restore();
 
     // スコアUI
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 24px sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(`クッキー: ${score} こ`, 20, 40);
+    let uiCookieImg = imgAssets.items.cookie;
+    if (uiCookieImg && uiCookieImg.complete) {
+        ctx.drawImage(uiCookieImg, 20, 15, 30, 30);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 26px sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(`× ${score}`, 60, 40);
+    } else {
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 24px sans-serif";
+        ctx.fillText(`クッキー: ${score} こ`, 20, 40);
+    }
 }
 
 // 4. リザルト画面の描画
@@ -403,7 +507,7 @@ function drawResultScreen() {
     ctx.fillText("どこでも タップで タイトルにもどるよ", canvas.width / 2, 360);
 }
 
-// --- 入力（タップ・クリック）イベント処理 ---
+// --- 入力イベント処理 ---
 function handleCanvasClick(e) {
     const rect = canvas.getBoundingClientRect();
     const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
