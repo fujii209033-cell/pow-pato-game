@@ -18,9 +18,14 @@
 <body>
 
     <div class="menu-container" id="menuContainer">
-        <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん</button>
-        <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい</button>
+    <div style="margin-bottom:10px;">
+        <button onclick="selectedChar='chase'">チェイス</button>
+        <button onclick="selectedChar='marshall'">マーシャル</button>
     </div>
+    <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん</button>
+    <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい</button>
+</div>
+
 
     <canvas id="gameCanvas" width="800" height="400"></canvas>
 
@@ -101,6 +106,13 @@ const chase = {
     isGrounded: false 
 };
 const goal = { x: STAGE_WIDTH - 250, y: 120, width: 120, height: 200 }; 
+
+const characterData = {
+    chase: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" },
+    marshall: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
+};
+let selectedChar = 'chase'; 
+
 
 function initGame() {
     score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
@@ -261,12 +273,22 @@ function playSound(audio) { audio.currentTime = 0; audio.play().catch(() => {});
 // ==========================================
 // 🕹️ 4. 操作・ゲーム開始とリトライ
 // ==========================================
+// 220行目付近のstartGame関数を修正
 function startGame(mode) {
     if (gameStarted) return;
-    initGame(); gameMode = mode; gameStarted = true;
+    initGame(); gameMode = mode;
+    
+    // ★ここから追加（画像パスの切り替え）★
+    chaseFrames[0].src = characterData[selectedChar].run1;
+    chaseFrames[1].src = characterData[selectedChar].run2;
+    chaseFrames[2].src = characterData[selectedChar].jump;
+    // ★ここまで追加★
+
+    gameStarted = true;
     document.getElementById("menuContainer").style.display = "none";
     playSound(bgm); playSound(voiceStart); gameLoop();
 }
+
 
 function backToTitle() {
     gameStarted = false;
