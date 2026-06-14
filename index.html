@@ -2,79 +2,45 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>パウパト・アクション</title>
     <style>
-        /* 画面全体の設定 */
-        body { margin: 0; padding: 0; background: #87CEEB; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        
-        /* ゲーム全体を囲う箱 */
-        #gameWrapper { position: relative; width: 800px; height: 400px; }
-        
-        /* キャンバス */
+        body { margin: 0; background: #87CEEB; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        #wrapper { position: relative; width: 800px; height: 400px; }
         canvas { display: block; background: #87CEEB; }
         
-        /* メニュー（ボタン）はCanvasの外に配置して遮断を防ぐ */
         #menuContainer { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            gap: 20px; z-index: 9999; background: #87CEEB;
+            position: absolute; top: 0; left: 0; width: 800px; height: 400px; 
+            z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
         }
-        
-        .btn-group { display: flex; gap: 20px; }
-        button { padding: 20px 40px; font-size: 24px; font-weight: bold; cursor: pointer; border-radius: 15px; border: 3px solid #333; touch-action: manipulation; }
+        button { padding: 20px; font-size: 20px; cursor: pointer; }
     </style>
 </head>
 <body>
-
-<div id="gameWrapper">
-    <div id="menuContainer">
-        <h1 style="color: white; font-size: 32px;">チェイスの パウパト・アクション！</h1>
-        <div class="btn-group">
-            <button onclick="selectChar('chase')">チェイス</button>
-            <button onclick="selectChar('marshall')">マーシャル</button>
+    <div id="wrapper">
+        <div id="menuContainer">
+            <h1>チェイスの パウパト・アクション！</h1>
+            <div id="buttons">
+                <button onclick="window.location.href='javascript:void(0); console.log(\'chase\');'">チェイス</button>
+                <button onclick="window.location.href='javascript:void(0); console.log(\'marshall\');'">マーシャル</button>
+                <br>
+                <button onclick="debugStart()">ゲームスタート</button>
+            </div>
         </div>
-        <div class="btn-group">
-            <button onclick="startGame('easy')" style="background:#90EE90;">かんたん</button>
-            <button onclick="startGame('hard')" style="background:#FF9999;">むずかしい</button>
-        </div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
     </div>
-    <canvas id="gameCanvas" width="800" height="400"></canvas>
-</div>
 
-<script>
-    let gameStarted = false;
-    let selectedChar = 'chase';
-
-    // デバッグ用：ボタンが押されたら必ず反応するようにする
-    function selectChar(char) {
-        selectedChar = char;
-        console.log("キャラ選択: " + char);
-        alert("キャラを " + char + " にしました");
-    }
-
-    function startGame(mode) {
-        if (gameStarted) return;
-        
-        // デバッグ用：スタートボタンの反応を確認
-        console.log("スタートボタン押下: " + mode);
-        
-        // メニューを消す
-        document.getElementById("menuContainer").style.display = "none";
-        
-        try {
-            // 既存のゲーム開始処理を呼び出す
-            if (typeof initGame === 'function') initGame();
-            gameStarted = true;
-            gameMode = mode;
-            if (typeof gameLoop === 'function') gameLoop();
-            
-            console.log("ゲームループ開始!");
-        } catch (e) {
-            alert("エラー発生: " + e.message);
-            console.error(e);
+    <script>
+        function debugStart() {
+            alert("スタートボタンが押されました！");
+            document.getElementById("menuContainer").style.display = "none";
+            // ここでinitGame()やgameLoop()を呼ぶ
+            if(typeof initGame === 'function') initGame();
+            if(typeof gameLoop === 'function') gameLoop();
         }
-    }
+    </script>
+</body>
+</html>
+
 
 
 
