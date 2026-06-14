@@ -1,660 +1,462 @@
-パウパトロールゲーム20260614時点完成版
-<仕様>
-チェイスを操作して障害物をジャンプで避けながらクッキー集めてパウステーションに到着
-かんたんとむずかしいの難易度がある
-
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>チェイスのパウパト・アクション（クリア時バク宙エフェクト版）</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>パウ・パトロール風 横スクロールゲーム</title>
     <style>
-        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
-        body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; overflow: hidden; position: relative; touch-action: none; }
-        canvas { background-color: #87CEEB; box-shadow: 0 4px 8px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; object-fit: contain; }
-        .menu-container { position: absolute; display: flex; gap: 20px; top: 65%; left: 50%; transform: translateX(-50%); z-index: 10; }
-        .mode-btn { padding: 12px 24px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 0 #999; transition: 0.1s; white-space: nowrap; }
-        .mode-btn:active { transform: translateY(4px); box-shadow: none; }
-        #easyBtn { background-color: #4ADE80; color: white; box-shadow: 0 4px 0 #166534; }
-        #hardBtn { background-color: #F87171; color: white; box-shadow: 0 4px 0 #991B1B; }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            background-color: #87CEEB; /* 空の色 */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            max-width: 100%;
+            max-height: 100%;
+        }
     </style>
 </head>
 <body>
 
-    <div class="menu-container" id="menuContainer">
-        <button class="mode-btn" id="easyBtn" onclick="startGame('easy')">かんたん</button>
-        <button class="mode-btn" id="hardBtn" onclick="startGame('hard')">むずかしい</button>
-    </div>
-
-    <canvas id="gameCanvas" width="800" height="400"></canvas>
+<canvas id="gameCanvas" width="800" height="400"></canvas>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// ==========================================
-// 🎵 1. オーディオ設定
-// ==========================================
-const bgm = new Audio("audio/bgm.mp3"); bgm.loop = true;
-const seJump = new Audio("audio/jump.mp3");
-const seItem = new Audio("audio/item.mp3");
-const seHit = new Audio("audio/hit.mp3");
-const seClear = new Audio("audio/clear.mp3");
-const seGameOver = new Audio("audio/gameover.mp3");
-const voiceStart = new Audio("audio/voice_start.mp3");
-const voiceClear = new Audio("audio/voice_clear.mp3");
-
-// ==========================================
-// 🖼️ 2. グラフィック設定
-// ==========================================
-const bgImg = new Image(); bgImg.src = "images/background.png";
-const goalImg = new Image(); goalImg.src = "images/paw_station.png";
-const itemImg = new Image(); itemImg.src = "images/cookie.png";
-
-const chaseFrames = [new Image(), new Image(), new Image()];
-chaseFrames[0].src = "images/chase_run1.png";
-chaseFrames[1].src = "images/chase_run2.png";
-chaseFrames[2].src = "images/chase_jump.png";
-
-const obstacleTypes = [
-    { src: "images/cat.png", width: 45, height: 40, color: "#FFA500", stompatble: false, id: "cat" },
-    { src: "images/puddle.png", width: 60, height: 15, color: "#4169E1", stompatble: false, id: "puddle" },
-    { src: "images/box.png", width: 40, height: 40, color: "#8B4513", stompatble: true, id: "box" },      
-    { src: "images/car.png", width: 70, height: 40, color: "#333333", stompatble: true, id: "car" },      
-    { src: "images/cone.png", width: 30, height: 40, color: "#FF4500", stompatble: true, id: "cone" }     
-];
-obstacleTypes.forEach(obs => { obs.img = new Image(); obs.img.src = obs.src; });
-
-// ==========================================
-// 🎮 3. ゲームデータと定数
-// ==========================================
-const STAGE_WIDTH = 16000; 
-const TILE_SIZE = 40;
-const GROUND_Y_LINE = 320; 
-
-let score, isCleared, isGameOver, gameStarted = false, animeFrame = 0, gameMode = 'easy', lives;
-let scrollX = 0;
-let baseSpeed = 5;       
-let currentSpeed = 5;    
-let slipTimer = 0;       
-let map = []; 
-let obstacles = []; 
-let items = []; 
-let invincibleTimer = 0; 
-let highScores = [];
-let isNewRecord = false;
-let particles = [];
-let cityBuildings = [];
-
-let isPressingAction = false; 
-
-// 🛠️ バク宙（回転アニメーション）用の状態管理変数を追加
-let chaseRotation = 0;       // 現在の回転角度（ラジアン）
-let isBackflipping = false;   // いまバク宙しているかどうか
-
-const chase = { 
-    x: 100, 
-    y: 200, 
-    width: 50, 
-    height: 50, 
-    vy: 0, 
-    gravity: 0.85,       
-    jumpPower: -10,      
-    maxJumpHold: 8,      
-    jumpHoldTimer: 0,   
-    isGrounded: false 
+// --- ゲームの状態（画面遷移用） ---
+const STATES = {
+    TITLE: 'TITLE',
+    CHAR_SELECT: 'CHAR_SELECT',
+    PLAY: 'PLAY',
+    RESULT: 'RESULT'
 };
-const goal = { x: STAGE_WIDTH - 250, y: 120, width: 120, height: 200 }; 
+let currentState = STATES.TITLE;
 
+// --- キャラクターの定数定義 ---
+const CHARACTER_CONFIG = {
+    chase: {
+        name: "チェイス",
+        color: "#1E3A8A",
+        speed: 5,
+        jumpPower: 12,
+        images: {
+            run1: "images/chase_run1.png",
+            run2: "images/chase_run2.png",
+            jump: "images/chase_jump.png"
+        }
+    },
+    marshall: {
+        name: "マーシャル",
+        color: "#DC2626",
+        speed: 4.5,
+        jumpPower: 13,
+        images: {
+            run1: "images/marshall_run1.png",
+            run2: "images/marshall_run2.png",
+            jump: "images/marshall_jump.png"
+        }
+    }
+};
+
+// 選択されたキャラクター情報を保持する変数
+let selectedCharKey = 'chase'; 
+
+// --- 画像アセットの管理 ---
+const imgAssets = {};
+// 全キャラクターの全画像をループで読み込み
+Object.keys(CHARACTER_CONFIG).forEach(charKey => {
+    imgAssets[charKey] = {};
+    Object.keys(CHARACTER_CONFIG[charKey].images).forEach(imgKey => {
+        imgAssets[charKey][imgKey] = new Image();
+        imgAssets[charKey][imgKey].src = CHARACTER_CONFIG[charKey].images[imgKey];
+    });
+});
+
+// --- アニメーション用タイマー ---
+let gameFrame = 0; // ループ毎に1ずつ増えるカウンター
+
+// --- ゲームスコアとランキング ---
+let score = 0;
+let ranking = [15, 10, 5]; 
+
+// --- プレイヤーオブジェクト ---
+let player = {
+    x: 100,
+    y: 250,
+    width: 50,
+    height: 50,
+    vy: 0,
+    gravity: 0.6,
+    isJumping: false
+};
+
+// --- ステージ要素の配列 ---
+let cookies = [];
+let obstacles = [];
+let goalX = 3000; 
+let cameraX = 0;
+
+// --- ゲームの初期化関数 ---
 function initGame() {
-    score = 0; isCleared = false; isGameOver = false; lives = 3; scrollX = 0; animeFrame = 0; invincibleTimer = 0; isNewRecord = false;
-    slipTimer = 0; currentSpeed = baseSpeed;
-    chaseRotation = 0; isBackflipping = false; // 初期化
-    particles = []; 
-    chase.x = 100; chase.y = GROUND_Y_LINE - chase.height; chase.vy = 0; chase.isGrounded = true;
-    isPressingAction = false;
+    score = 0;
+    cameraX = 0;
+    player.x = 100;
+    player.y = 250;
+    player.vy = 0;
+    player.isJumping = false;
 
-    cityBuildings = [];
-    const colors = ["#FF4D4D", "#4D79FF", "#FFD633", "#4DFF4D", "#FFA64D", "#E64DFF"];
-    for (let i = 0; i < 200; i++) {
-        cityBuildings.push({
-            x: i * 130 + Math.random() * 40,
-            width: 75 + Math.random() * 30,
-            height: 90 + Math.random() * 110,
-            color: colors[Math.floor(Math.random() * colors.length)],
-            roofType: Math.random() > 0.5 ? 'triangle' : 'flat'
+    // クッキーの配置
+    cookies = [];
+    for (let i = 0; i < 15; i++) {
+        cookies.push({
+            x: 400 + i * 180 + Math.random() * 50,
+            y: 200 + Math.random() * 80,
+            width: 25,
+            height: 25,
+            collected: false
         });
     }
 
-    map = Array(STAGE_WIDTH / TILE_SIZE).fill(0);
-    for(let i = 0; i < map.length; i++) {
-        if(i > 15 && i < map.length - 20) {
-            if (i % 16 === 0 && map[i-1] === 0) {
-                let r = Math.random();
-                if (r < 0.4) {
-                    map[i] = 2; map[i+1] = 2; map[i+2] = 2; 
-                    map[i+3] = 4; map[i+4] = 4; map[i+5] = 4; 
-                    map[i+6] = 3; map[i+7] = 3; map[i+8] = 3; 
-                    i += 8;
-                } else if (r < 0.7) {
-                    map[i] = 2; map[i+1] = 2;
-                    map[i+2] = 4; map[i+3] = 4;
-                    map[i+4] = 3; map[i+5] = 3;
-                    i += 5;
-                } else {
-                    map[i] = 2; map[i+1] = 2; map[i+2] = 2; map[i+3] = 2;
-                    map[i+4] = 4; map[i+5] = 4; map[i+6] = 4; map[i+7] = 4;
-                    map[i+8] = 3; map[i+9] = 3; map[i+10] = 3; map[i+11] = 3;
-                    i += 11;
-                }
-            } 
-            else if (i % 23 === 0 && map[i] === 0 && map[i-1] === 0 && map[i+1] === 0) {
-                map[i] = 1; map[i+1] = 1; 
-                i += 1;
-            }
-            else if (i % 31 === 0 && map[i] === 0 && map[i-1] === 0 && map[i+5] === 0) {
-                for (let r = 0; r < 5; r++) { map[i + r] = 5; }
-                i += 4;
-            }
-        }
-    }
-
+    // 障害物の配置
     obstacles = [];
-    for (let i = 300; i < STAGE_WIDTH - 500; i += 300 + Math.random() * 250) {
-        let tileIdx = Math.floor(i / TILE_SIZE);
-        if (map[tileIdx] !== 1 && map[tileIdx+1] !== 1) { 
-            const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
-            let h = getGroundYAt(i); 
-            obstacles.push({ x: i, y: h - type.height, width: type.width, height: type.height, img: type.img, color: type.color, stompatble: type.stompatble, id: type.id, isDefeated: false });
-        }
-    }
-
-    items = [];
-    for (let i = 200; i < STAGE_WIDTH - 400; i += 100 + Math.random() * 60) {
-        let h = getGroundYAt(i);
-        let tileIdx = Math.floor(i / TILE_SIZE);
-        
-        let matchedObs = obstacles.find(obs => Math.abs(obs.x - i) < 60);
-
-        if (map[tileIdx] === 1) {
-            items.push({ x: i, y: GROUND_Y_LINE - 100, width: 30, height: 30, isCollected: false });
-        } else if (matchedObs && matchedObs.stompatble) {
-            items.push({ x: i, y: h - 130, width: 30, height: 30, isCollected: false });
-            items.push({ x: i + 35, y: h - 190, width: 30, height: 30, isCollected: false }); 
-            items.push({ x: i + 70, y: h - 130, width: 30, height: 30, isCollected: false });
-        } else if (matchedObs) {
-            items.push({ x: i, y: h - 130, width: 30, height: 30, isCollected: false });
-        } else {
-            let yPos = Math.random() > 0.75 ? h - 160 : h - 60 - Math.random() * 30;
-            items.push({ x: i, y: yPos, width: 30, height: 30, isCollected: false });
-        }
-    }
-}
-
-function getGroundYAt(absoluteX) {
-    if (absoluteX < 0 || absoluteX >= STAGE_WIDTH) return GROUND_Y_LINE;
-    let tileIdx = Math.floor(absoluteX / TILE_SIZE);
-    let ratio = (absoluteX % TILE_SIZE) / TILE_SIZE; 
-    
-    let type = map[tileIdx];
-    if (type === 1) return 9999; // 穴（落下判定用）
-    if (type === 4) return GROUND_Y_LINE - 60;  
-    
-    // 上り坂
-    if (type === 2) { 
-        let startIdx = tileIdx;
-        while(startIdx > 0 && map[startIdx-1] === 2) startIdx--;
-        let count = 0;
-        while(map[startIdx + count] === 2) count++;
-        let slopeProgress = ((tileIdx - startIdx) + ratio) / count;
-        return GROUND_Y_LINE - (slopeProgress * 60);
-    }
-    // 下り坂（修正版）
-    if (type === 3) { 
-        let startIdx = tileIdx;
-        while(startIdx > 0 && map[startIdx-1] === 3) startIdx--;
-        let count = 0;
-        while(map[startIdx + count] === 3) count++;
-        let slopeProgress = ((tileIdx - startIdx) + ratio) / count;
-        return GROUND_Y_LINE - 60 + (slopeProgress * 60);
-    }
-    return GROUND_Y_LINE; 
-}
-
-
-function triggerDamageEffects(isFallInPit) {
-    let droppedCookieCount = 0;
-    if (score > 0) { score--; droppedCookieCount = 1; }
-
-    particles.push({
-        type: 'sweat',
-        x: chase.x + 10,                 
-        y: isFallInPit ? 150 : chase.y + 10, 
-        vx: -2.5,                        
-        vy: -4.5,                        
-        life: 35                         
-    });
-
-    if (droppedCookieCount > 0) {
-        particles.push({
-            type: 'cookie',
-            x: chase.x - 10, 
-            y: isFallInPit ? 120 : chase.y + chase.height - 20,
-            vx: -3 - Math.random() * 2, 
-            vy: -4 - Math.random() * 3, 
-            gravity: 0.5,
-            life: 60, 
-            bounce: 2 
+    for (let i = 0; i < 6; i++) {
+        let type = Math.random() > 0.5 ? 'pit' : 'rock'; 
+        obstacles.push({
+            x: 600 + i * 400 + Math.random() * 100,
+            y: type === 'rock' ? 260 : 300, 
+            width: type === 'rock' ? 40 : 60,
+            height: type === 'rock' ? 40 : 100,
+            type: type
         });
     }
 }
 
-function saveAndLoadRanking() {
-    let storageKey = "paw_patrol_scores_" + gameMode;
-    let savedScores = localStorage.getItem(storageKey);
-    highScores = savedScores ? JSON.parse(savedScores) : [];
-    highScores.push(score);
-    highScores = [...new Set(highScores)].sort((a, b) => b - a);
-    if (highScores[0] === score) isNewRecord = true;
-    highScores = highScores.slice(0, 5);
-    localStorage.setItem(storageKey, JSON.stringify(highScores));
-}
+// --- 更新処理（プレイ画面用） ---
+function update() {
+    // 画面状態に関わらず、フレームカウンターは常に進める（アニメーション用）
+    gameFrame++;
 
-function playSound(audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    if (currentState !== STATES.PLAY) return;
 
-// ==========================================
-// 🕹️ 4. 操作・ゲーム開始とリトライ
-// ==========================================
-function startGame(mode) {
-    if (gameStarted) return;
-    initGame(); gameMode = mode; gameStarted = true;
-    document.getElementById("menuContainer").style.display = "none";
-    playSound(bgm); playSound(voiceStart); gameLoop();
-}
+    const charConfig = CHARACTER_CONFIG[selectedCharKey];
 
-function backToTitle() {
-    gameStarted = false;
-    document.getElementById("menuContainer").style.display = "flex";
-    drawTitleScreen();
-}
+    // プレイヤーの自動前進
+    player.x += charConfig.speed;
 
-function pressAction() {
-    if (!gameStarted) return;
-    if (isCleared || isGameOver) { backToTitle(); return; }
-    if (isBackflipping) return; // バク宙中は追加入力を禁止
-    
-    if (chase.isGrounded) {
-        chase.vy = chase.jumpPower; 
-        chase.isGrounded = false; 
-        chase.jumpHoldTimer = chase.maxJumpHold; 
-        playSound(seJump);
+    // 重力とジャンプ処理
+    player.vy += player.gravity;
+    player.y += player.vy;
+
+    // 地面での接地判定
+    if (player.y >= 250) {
+        player.y = 250;
+        player.vy = 0;
+        player.isJumping = false;
     }
-    isPressingAction = true;
-}
 
-function releaseAction() {
-    isPressingAction = false;
-}
+    // カメラの追従
+    cameraX = player.x - 100;
 
-// コントロールイベント
-window.addEventListener("keydown", (e) => {
-    if ((e.code === "Space" || e.code === "ArrowUp") && !isPressingAction) { e.preventDefault(); pressAction(); }
-});
-window.addEventListener("keyup", (e) => {
-    if (e.code === "Space" || e.code === "ArrowUp") { releaseAction(); }
-});
-window.addEventListener("mousedown", (e) => {
-    if (e.target.tagName === 'BUTTON') return;
-    pressAction();
-});
-window.addEventListener("mouseup", releaseAction);
-window.addEventListener("touchstart", (e) => {
-    if (e.target.tagName === 'BUTTON') return;
-    pressAction();
-}, { passive: true });
-window.addEventListener("touchend", releaseAction);
-
-// ==========================================
-// 🔄 5. メインゲームループ
-// ==========================================
-function gameLoop() {
-    if (!gameStarted) return;
-    
-    // 🛠️ 通常プレイ、またはクリア後のバク宙演出中ならアニメーションを動かす
-    if (!isGameOver) {
-        animeFrame++;
-
-        // 🛠️ クリア後の演出処理
-        if (isCleared) {
-            // ゴール到達の最初の1フレームだけ、大バク宙ジャンプをセット
-            if (!isBackflipping) {
-                isBackflipping = true;
-                chase.vy = -12; // ふんわり高いクリアバク宙
-                chase.isGrounded = false;
-            }
-
-            // バク宙の物理移動
-            chase.vy += chase.gravity;
-            chase.y += chase.vy;
-
-            // 後ろにくるっと1回転（時計回りにマイナス＝バク宙）させる
-            if (!chase.isGrounded) {
-                chaseRotation -= 0.14; // 回転スピード
-            }
-
-            let currentGroundY = getGroundYAt(chase.x + scrollX + chase.width/2);
-            // 着地チェック
-            if (chase.y + chase.height >= currentGroundY) {
-                chase.y = currentGroundY - chase.height;
-                chase.vy = 0;
-                chase.isGrounded = true;
-                chaseRotation = 0; // 角度をカチッと正面に戻す
-            }
-        } 
-        // 通常のゲーム進行
-       // 通常のゲーム進行
-else {
-    if (slipTimer > 0) {
-        slipTimer--;
-        currentSpeed = baseSpeed * 0.4; 
-        if (Math.random() > 0.7) {
-            particles.push({ type: 'slip_splash', x: chase.x + 10 + Math.random()*20, y: chase.y + chase.height, vx: -2 - Math.random()*2, vy: -1 - Math.random()*2, life: 15 });
+    // クッキーとの当たり判定
+    cookies.forEach(cookie => {
+        if (!cookie.collected &&
+            player.x < cookie.x + cookie.width &&
+            player.x + player.width > cookie.x &&
+            player.y < cookie.y + cookie.height &&
+            player.y + player.height > cookie.y) {
+            cookie.collected = true;
+            score++;
         }
-    } else {
-        currentSpeed = baseSpeed;
-    }
+    });
 
-    scrollX += currentSpeed; 
-
-    if (invincibleTimer > 0) invincibleTimer--;
-
-    if (isPressingAction && chase.jumpHoldTimer > 0) {
-        chase.vy -= 0.65; 
-        chase.jumpHoldTimer--;
-    }
-
-    chase.vy += chase.gravity;
-    chase.y += chase.vy;
-
-    // 🛠️ 接地判定の修正：±10pxの猶予を持たせることで坂道でもスムーズに接地
-    let chaseAbsX = chase.x + scrollX + chase.width / 2;
-    let currentGroundY = getGroundYAt(chaseAbsX);
-    let currentTileIndex = Math.floor(chaseAbsX / TILE_SIZE);
-            
-    if (map[currentTileIndex] !== 1 && chase.vy >= 0 && chase.y + chase.height >= currentGroundY - 10 && chase.y + chase.height <= currentGroundY + 10) { 
-        chase.y = currentGroundY - chase.height;
-        chase.vy = 0;
-        chase.isGrounded = true;
-        chase.jumpHoldTimer = 0; 
-    } else { 
-        chase.isGrounded = false; 
-    }
-
-    // 穴への落下判定
-    if (chase.y > 400) {
-        playSound(seHit);
-        if (gameMode === 'hard') {
-            lives--;
-            if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); saveAndLoadRanking(); }
-        }
-        if (!isGameOver) {
-            chase.y = 100; chase.vy = 0; invincibleTimer = 120; slipTimer = 0;
-            while(map[Math.floor((chase.x + scrollX + chase.width/2)/TILE_SIZE)] === 1) { scrollX += TILE_SIZE; }
-            triggerDamageEffects(true);
-        }
-    }
-
+    // 障害物との当たり判定
     obstacles.forEach(obs => {
-        if (obs.isDefeated) return;
-        let screenObsX = obs.x - scrollX;
-        
-        if (chase.x < screenObsX + obs.width && chase.x + chase.width > screenObsX &&
-            chase.y < obs.y + obs.height && chase.y + chase.height > obs.y) {
+        if (player.x < obs.x + obs.width &&
+            player.x + player.width > obs.x &&
+            player.y < obs.y + obs.height &&
+            player.y + player.height > obs.y) {
             
-            if (obs.stompatble && chase.vy > 0 && chase.y + chase.height - chase.vy <= obs.y + 14) {
-                playSound(seItem); 
-                obs.isDefeated = true; 
-                chase.y = obs.y - chase.height;
-                chase.vy = -14.5; 
-                chase.isGrounded = false;
-                chase.jumpHoldTimer = 0; 
-                
-                for(let k=0; k<5; k++) {
-                    particles.push({ type: 'smoke', x: screenObsX + obs.width/2, y: obs.y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 20 });
-                }
-            } 
-            else if (obs.id === "puddle") {
-                if (slipTimer === 0) {
-                    slipTimer = 40; 
-                    playSound(seHit);
-                }
-            }
-            else if (invincibleTimer === 0) {
-                playSound(seHit);
-                triggerDamageEffects(false);
-                if (gameMode === 'hard') { 
-                    lives--; 
-                    if (lives <= 0) { isGameOver = true; bgm.pause(); playSound(seGameOver); saveAndLoadRanking(); } 
-                }
-                obs.isDefeated = true; invincibleTimer = 120;
+            if (obs.type === 'pit') {
+                endGame();
+            } else {
+                obs.x = -1000; 
+                score = Math.max(0, score - 1);
             }
         }
     });
 
-    items.forEach(it => {
-        let screenItemX = it.x - scrollX;
-        if (!it.isCollected && chase.x < screenItemX + it.width && chase.x + chase.width > screenItemX &&
-            chase.y < it.y + it.height && chase.y + chase.height > it.y) {
-            it.isCollected = true; score += 1; playSound(seItem);
-        }
-    });
-
-    // ゴール判定
-    if (chase.x + scrollX > goal.x) { 
-        isCleared = true; bgm.pause(); playSound(seClear); playSound(voiceClear); saveAndLoadRanking(); 
+    // ゴール到達判定
+    if (player.x >= goalX) {
+        endGame();
     }
 }
 
-
-        // パーティクルの更新
-        for (let i = particles.length - 1; i >= 0; i--) {
-            let p = particles[i];
-            p.x += p.vx; p.y += p.vy; p.life--;
-            if (p.type === 'cookie') {
-                p.vy += p.gravity;
-                let currentPartGround = getGroundYAt(p.x + scrollX);
-                if (p.y >= currentPartGround - 15) { 
-                    p.y = currentPartGround - 15;
-                    if (p.bounce > 0) { p.vy = -p.vy * 0.4; p.vx *= 0.6; p.bounce--; } else { p.vx = 0; p.vy = 0; }
-                }
-            }
-            if (p.life <= 0) { particles.splice(i, 1); }
-        }
+// ジャンプ動作の発火
+function triggerJump() {
+    if (!player.isJumping) {
+        const charConfig = CHARACTER_CONFIG[selectedCharKey];
+        player.vy = -charConfig.jumpPower; 
+        player.isJumping = true;
     }
+}
 
-    // ----- 描画処理 (Draw) -----
+// ゲーム終了（リザルト画面へ）
+function endGame() {
+    ranking.push(score);
+    ranking.sort((a, b) => b - a); 
+    ranking = ranking.slice(0, 3); 
+    currentState = STATES.RESULT;
+}
+
+// --- 描画処理 ---
+function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. 背景
-    if (bgImg.complete && bgImg.width > 0) {
-        let bgMoveX = -(scrollX * 0.3) % canvas.width;
-        ctx.drawImage(bgImg, bgMoveX, 0, canvas.width, canvas.height);
-        ctx.drawImage(bgImg, bgMoveX + canvas.width, 0, canvas.width, canvas.height);
-    } else { 
-        ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+    if (currentState === STATES.TITLE) {
+        drawTitleScreen();
+    } else if (currentState === STATES.CHAR_SELECT) {
+        drawCharSelectScreen();
+    } else if (currentState === STATES.PLAY) {
+        drawPlayScreen();
+    } else if (currentState === STATES.RESULT) {
+        drawResultScreen();
     }
-
-    // 2. 街並み
-    cityBuildings.forEach(b => {
-        let buildingScreenX = b.x - (scrollX * 0.5);
-        if (buildingScreenX >= -150 && buildingScreenX <= canvas.width) {
-            ctx.fillStyle = b.color;
-            ctx.fillRect(buildingScreenX, GROUND_Y_LINE - b.height, b.width, b.height);
-            ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-            for (let wx = buildingScreenX + 10; wx < buildingScreenX + b.width - 15; wx += 25) {
-                for (let wy = GROUND_Y_LINE - b.height + 15; wy < GROUND_Y_LINE - 15; wy += 30) {
-                    ctx.fillRect(wx, wy, 12, 15);
-                }
-            }
-            if (b.roofType === 'triangle') {
-                ctx.fillStyle = "#333333"; ctx.beginPath();
-                ctx.moveTo(buildingScreenX - 5, GROUND_Y_LINE - b.height);
-                ctx.lineTo(buildingScreenX + b.width / 2, GROUND_Y_LINE - b.height - 20);
-                ctx.lineTo(buildingScreenX + b.width + 5, GROUND_Y_LINE - b.height);
-                ctx.closePath(); ctx.fill();
-            }
-        }
-    });
-
-    // 3. 地面描画
-    let startTile = Math.floor(Math.max(0, scrollX - TILE_SIZE) / TILE_SIZE);
-    let endTile = Math.ceil((scrollX + canvas.width + TILE_SIZE) / TILE_SIZE);
-
-    for (let i = startTile; i < Math.min(map.length, endTile); i++) {
-        let type = map[i];
-        if (type === 1) continue; 
-
-        let x1 = i * TILE_SIZE - scrollX;
-        let x2 = x1 + TILE_SIZE + 1; 
-        
-        let y1_top = getGroundYAt(i * TILE_SIZE);
-        let y2_top = getGroundYAt((i + 1) * TILE_SIZE);
-        
-        let isRoad = (type === 5);
-
-        ctx.fillStyle = isRoad ? "#555555" : "#228B22";
-        ctx.beginPath();
-        ctx.moveTo(x1, y1_top);
-        ctx.lineTo(x2, y2_top);
-        ctx.lineTo(x2, canvas.height);
-        ctx.lineTo(x1, canvas.height);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle = isRoad ? "#3A3A3A" : "#1e781e";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1_top + 2);
-        ctx.lineTo(x2, y2_top + 2);
-        ctx.stroke();
-
-        if (isRoad && Math.floor((i * TILE_SIZE) / 30) % 2 === 0) {
-            ctx.fillStyle = "#FFFFFF";
-            ctx.fillRect(x1 + 10, y1_top + 15, 20, 3);
-        }
-    }
-
-    // 4. アイテム・障害物・ゴール描画
-    items.forEach(it => {
-        let screenItemX = it.x - scrollX;
-        if (!it.isCollected && screenItemX >= -30 && screenItemX <= canvas.width) {
-            if (itemImg.complete && itemImg.width > 0) ctx.drawImage(itemImg, screenItemX, it.y, it.width, it.height);
-            else { ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(screenItemX + 15, it.y + 15, 15, 0, Math.PI * 2); ctx.fill(); }
-        }
-    });
-
-    obstacles.forEach(obs => {
-        if (obs.isDefeated) return;
-        let screenObsX = obs.x - scrollX;
-        if (screenObsX >= -100 && screenObsX <= canvas.width) {
-            if (obs.img && obs.img.complete && obs.img.width > 0) ctx.drawImage(obs.img, screenObsX, obs.y, obs.width, obs.height);
-            else { ctx.fillStyle = obs.color; ctx.fillRect(screenObsX, obs.y, obs.width, obs.height); }
-        }
-    });
-
-    let screenGoalX = goal.x - scrollX;
-    if (goalImg.complete && goalImg.width > 0) ctx.drawImage(goalImg, screenGoalX, goal.y, goal.width, goal.height);
-    else { ctx.fillStyle = "#1E3A8A"; ctx.fillRect(screenGoalX, goal.y, goal.width, goal.height); }
-
-    // 5. チェイスの描画（🛠️ 回転エフェクト対応版レンダラー）
-    if (invincibleTimer === 0 || Math.floor(animeFrame / 5) % 2 === 0) {
-        let currentChaseImg = chaseFrames[0];
-        if (!chase.isGrounded) currentChaseImg = chaseFrames[2];
-        else currentChaseImg = chaseFrames[Math.floor(animeFrame / 10) % 2];
-        
-        ctx.save();
-        // 🛠️ 画像の中心を回転の軸にするための座標移動
-        ctx.translate(chase.x + chase.width / 2, chase.y + chase.height / 2);
-        ctx.rotate(chaseRotation); // バク宙の角度を適用
-        
-        if (currentChaseImg.complete && currentChaseImg.width > 0) {
-            // 中心点を移動したため、描画座標は -width/2, -height/2 になる
-            ctx.drawImage(currentChaseImg, -chase.width / 2, -chase.height / 2, chase.width, chase.height);
-        } else { 
-            ctx.fillStyle = "#0000FF"; ctx.fillRect(-chase.width / 2, -chase.height / 2, chase.width, chase.height); 
-        }
-        ctx.restore();
-    }
-
-    if (slipTimer > 0) {
-        ctx.font = "20px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("🌀", chase.x + chase.width / 2, chase.y - 10);
-    }
-
-    // 6. エフェクト描画
-    particles.forEach(p => {
-        if (p.type === 'sweat') {
-            ctx.font = "24px sans-serif"; ctx.textAlign = "center"; ctx.fillText("💦", p.x, p.y);
-        } else if (p.type === 'cookie') {
-            if (itemImg.complete && itemImg.width > 0) { ctx.drawImage(itemImg, p.x, p.y, 25, 25); } 
-            else { ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(p.x + 12, p.y + 12, 12, 0, Math.PI * 2); ctx.fill(); }
-        } else if (p.type === 'smoke') {
-            ctx.fillStyle = "rgba(230, 230, 230, 0.7)"; ctx.beginPath(); ctx.arc(p.x, p.y, 6 * (p.life/20), 0, Math.PI*2); ctx.fill();
-        } else if (p.type === 'slip_splash') {
-            ctx.fillStyle = "rgba(65, 105, 225, 0.6)"; ctx.fillRect(p.x, p.y, 4, 4);
-        }
-    });
-
-    // 7. UI表示
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "left";
-    ctx.fillText("ほねクッキー: " + score + (gameMode === 'hard' ? "  ❤️×" + lives : ""), 20, 40);
-
-    ctx.fillStyle = "rgba(211, 211, 211, 0.5)"; ctx.fillRect(20, 55, 15 * 10, 8);
-    ctx.fillStyle = "#FFFF00"; ctx.fillRect(20, 55, (scrollX / (STAGE_WIDTH - 800)) * (15 * 10), 8);
-
-    // リザルト画面の表示
-    if (isCleared || isGameOver) {
-        // バク宙が完全に着地（または終了）するまでは、リザルトの黒帯メニューを出さずにジャンプを魅せる
-        if (isCleared && !chase.isGrounded) {
-            requestAnimationFrame(gameLoop);
-            return;
-        }
-
-        ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#FFFF00"; ctx.font = "bold 36px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText(isCleared ? "パウフェクト！" : "解決ならず…！", canvas.width / 2, 60);
-        ctx.fillStyle = "#FFFFFF"; ctx.font = "20px sans-serif";
-        ctx.fillText("今回のクッキー: " + score + " こ", canvas.width / 2, 105);
-
-        if (isNewRecord && isCleared) {
-            ctx.fillStyle = "#FF4500"; ctx.font = "bold 20px sans-serif"; ctx.fillText("👑 じこベストこうしん！ 👑", canvas.width / 2, 135);
-        }
-
-        ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(canvas.width / 2 - 150, 155, 300, 150);
-        ctx.fillStyle = "#FFFF00"; ctx.font = "bold 18px sans-serif"; ctx.fillText("🏆 ベストきろく 🏆", canvas.width / 2, 180);
-        
-        ctx.fillStyle = "#FFFFFF"; ctx.font = "16px sans-serif";
-        for (let i = 0; i < 3; i++) {
-            let rankText = (i + 1) + "い: " + (highScores[i] !== undefined ? highScores[i] + " こ" : "---");
-            if (highScores[i] === score && isCleared) ctx.fillStyle = "#FFFF00"; else ctx.fillStyle = "#FFFFFF";
-            ctx.fillText(rankText, canvas.width / 2, 215 + i * 25);
-        }
-        ctx.fillStyle = "#FFFFFF"; ctx.font = "14px sans-serif"; ctx.textAlign = "center";
-        ctx.fillText("【 タップで タイトルに もどる 】", canvas.width / 2, 345);
-    } else { requestAnimationFrame(gameLoop); }
 }
 
+// 1. タイトル画面の描画
 function drawTitleScreen() {
-    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#228B22"; ctx.fillRect(0, GROUND_Y_LINE, canvas.width, canvas.height - GROUND_Y_LINE);
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("チェイスの パウパト・アクション！", canvas.width / 2, canvas.height / 2 - 60);
-    ctx.font = "18px sans-serif"; ctx.fillText("どっちの モードで あそぶ？", canvas.width / 2, canvas.height / 2 - 20);
+    ctx.fillStyle = "#87CEEB";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#FFD700";
+    ctx.strokeStyle = "#DC2626";
+    ctx.lineWidth = 8;
+    ctx.font = "bold 50px 'Arial Black'";
+    ctx.textAlign = "center";
+    ctx.strokeText("パウ・パトロール ゲーム", canvas.width / 2, 150);
+    ctx.fillText("パウ・パトロール ゲーム", canvas.width / 2, 150);
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText("画面を タップして スタート！", canvas.width / 2, 280);
 }
-drawTitleScreen();
+
+// 2. キャラ選択画面の描画
+const charButtons = {
+    chase: { x: 150, y: 160, width: 200, height: 160 },
+    marshall: { x: 450, y: 160, width: 200, height: 160 }
+};
+
+function drawCharSelectScreen() {
+    ctx.fillStyle = "#E0F2FE";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#1E293B";
+    ctx.font = "bold 32px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("だれで あそぶ？", canvas.width / 2, 80);
+
+    drawSelectButton('chase', charButtons.chase, CHARACTER_CONFIG.chase);
+    drawSelectButton('marshall', charButtons.marshall, CHARACTER_CONFIG.marshall);
+}
+
+function drawSelectButton(key, rect, config) {
+    ctx.fillStyle = config.color;
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 20);
+    ctx.fill();
+    
+    ctx.fillStyle = "#FFFFFF";
+    ctx.beginPath();
+    ctx.roundRect(rect.x + 8, rect.y + 8, rect.width - 16, rect.height - 16, 15);
+    ctx.fill();
+
+    // キャラ選択画面でのアニメーション（15フレームごとにrun1とrun2を交互に切り替え）
+    let currentImgKey = (Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2';
+    let img = imgAssets[key][currentImgKey];
+
+    if (img && img.complete) {
+        ctx.drawImage(img, rect.x + rect.width/2 - 40, rect.y + 20, 80, 80);
+    } else {
+        ctx.fillStyle = config.color;
+        ctx.beginPath();
+        ctx.arc(rect.x + rect.width / 2, rect.y + 60, 35, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.fillStyle = "#1E293B";
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 135);
+}
+
+// 3. プレイ画面の描画
+function drawPlayScreen() {
+    ctx.fillStyle = "#87CEEB";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = "#22C55E"; 
+    ctx.fillRect(0, 300, canvas.width, 100);
+
+    ctx.save();
+    ctx.translate(-cameraX, 0);
+
+    // 障害物の描画
+    obstacles.forEach(obs => {
+        if (obs.type === 'rock') {
+            ctx.fillStyle = "#78716C"; 
+            ctx.beginPath();
+            ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10);
+            ctx.fill();
+        } else if (obs.type === 'pit') {
+            ctx.fillStyle = "#87CEEB"; 
+            ctx.fillRect(obs.x, 300, obs.width, 100);
+        }
+    });
+
+    // クッキーの描画
+    cookies.forEach(cookie => {
+        if (!cookie.collected) {
+            ctx.fillStyle = "#D97706"; 
+            ctx.beginPath();
+            ctx.arc(cookie.x + 12, cookie.y + 12, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#451A03";
+            ctx.fillRect(cookie.x + 6, cookie.y + 6, 3, 3);
+            ctx.fillRect(cookie.x + 14, cookie.y + 8, 3, 3);
+            ctx.fillRect(cookie.x + 10, cookie.y + 14, 3, 3);
+        }
+    });
+
+    // ゴールの描画
+    ctx.fillStyle = "#EF4444";
+    ctx.fillRect(goalX, 100, 80, 200); 
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("パウステーション", goalX + 40, 90);
+
+    // --- プレイヤーのアニメーション分け ---
+    let activeImgKey = 'run1';
+    if (player.isJumping) {
+        // ジャンプ中は固定でjump画像
+        activeImgKey = 'jump';
+    } else {
+        // 地面にいる時は、10フレームごとにrun1とrun2をパタパタ切り替え
+        activeImgKey = (Math.floor(gameFrame / 10) % 2 === 0) ? 'run1' : 'run2';
+    }
+
+    let pImg = imgAssets[selectedCharKey][activeImgKey];
+    const charConfig = CHARACTER_CONFIG[selectedCharKey];
+
+    if (pImg && pImg.complete) {
+        ctx.drawImage(pImg, player.x, player.y, player.width, player.height);
+    } else {
+        ctx.fillStyle = charConfig.color;
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+    }
+
+    ctx.restore();
+
+    // スコアUI
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 24px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`クッキー: ${score} こ`, 20, 40);
+}
+
+// 4. リザルト画面の描画
+function drawResultScreen() {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "center";
+    
+    ctx.font = "bold 40px sans-serif";
+    ctx.fillText("ゲームおわり！", canvas.width / 2, 80);
+
+    ctx.font = "bold 30px sans-serif";
+    ctx.fillStyle = "#FFD700";
+    ctx.fillText(`きみのスコア: ${score} こ`, canvas.width / 2, 140);
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 22px sans-serif";
+    ctx.fillText("とうばん ランキング", canvas.width / 2, 200);
+    
+    ranking.forEach((rankScore, index) => {
+        ctx.fillText(`${index + 1}い: ${rankScore} こ`, canvas.width / 2, 240 + index * 30);
+    });
+
+    ctx.font = "18px sans-serif";
+    ctx.fillStyle = "#CBD5E1";
+    ctx.fillText("どこでも タップで タイトルにもどるよ", canvas.width / 2, 360);
+}
+
+// --- 入力（タップ・クリック）イベント処理 ---
+function handleCanvasClick(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    if (currentState === STATES.TITLE) {
+        currentState = STATES.CHAR_SELECT;
+
+    } else if (currentState === STATES.CHAR_SELECT) {
+        if (clickX >= charButtons.chase.x && clickX <= charButtons.chase.x + charButtons.chase.width &&
+            clickY >= charButtons.chase.y && clickY <= charButtons.chase.y + charButtons.chase.height) {
+            selectedCharKey = 'chase';
+            initGame();
+            currentState = STATES.PLAY;
+        } else if (clickX >= charButtons.marshall.x && clickX <= charButtons.marshall.x + charButtons.marshall.width &&
+                   clickY >= charButtons.marshall.y && clickY <= charButtons.marshall.y + charButtons.marshall.height) {
+            selectedCharKey = 'marshall';
+            initGame();
+            currentState = STATES.PLAY;
+        }
+
+    } else if (currentState === STATES.PLAY) {
+        triggerJump();
+
+    } else if (currentState === STATES.RESULT) {
+        currentState = STATES.TITLE;
+    }
+}
+
+canvas.addEventListener("mousedown", handleCanvasClick);
+canvas.addEventListener("touchstart", function(e) {
+    e.preventDefault(); 
+    handleCanvasClick(e.touches[0]);
+}, { passive: false });
+
+window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+        if (currentState === STATES.PLAY) {
+            triggerJump();
+        }
+    }
+});
+
+// --- メインループ ---
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// ループ開始
+gameLoop();
 </script>
+
 </body>
 </html>
