@@ -22,26 +22,38 @@
     </div>
 
     <script>
-        // ゲーム開始時に呼ばれる関数をここに定義
-        function initGame() {
-            console.log("初期化開始");
-            // ここに、本来のゲームの初期化処理（変数のリセットなど）を書いてください
-            // もし何もないなら、とりあえず空のままでもエラーは消えます
-        }
-
-        function gameLoop() {
-            console.log("ゲームループ開始");
-            // ここにゲームの描画ループ処理を書いてください
-        }
-
-        function debugStart() {
-            console.log("スタートボタン押下");
-            document.getElementById("menuContainer").style.display = "none";
+        <script>
+    // ゲーム開始関数
+    function debugStart() {
+        console.log("ゲームスタート押下");
+        
+        // 1. メニューを消す
+        const menu = document.getElementById("menuContainer");
+        if(menu) menu.style.display = "none";
+        
+        // 2. エラーを捕捉しながら実行
+        try {
+            // ここに、あなたのゲーム本編のコード（initGameやgameLoop）を定義する必要があります
+            // 以下は、ゲームが確実に開始されるか確認するためのテストです
+            if (typeof initGame === 'function') {
+                initGame();
+            } else {
+                console.warn("initGame関数が定義されていません");
+            }
             
-            // 関数を定義したので、ここで実行されます
-            initGame();
-            gameLoop();
+            if (typeof gameLoop === 'function') {
+                gameLoop();
+                console.log("gameLoop開始成功");
+            } else {
+                alert("エラー: gameLoop関数が見つかりません");
+            }
+        } catch (e) {
+            alert("エラー発生: " + e.message);
+            console.error(e);
         }
+    }
+</script>
+
 
 
 
