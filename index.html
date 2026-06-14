@@ -13,8 +13,23 @@
         canvas { background-color: #87CEEB; display: block; width: 100%; height: 100%; }
         
         /* メニュー（ボタン）はCanvasの上に絶対配置 */
-        .menu-container { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        /* メニューボタンに直接タッチイベントを許可する */
+       .menu-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1000; /* 最前面に固定 */
+        pointer-events: none; /* コンテナ自体はクリックを透過 */
+       }
+
+       /* ボタン要素だけクリックを有効にする */
+       .menu-container button {
+        pointer-events: auto; /* ボタンのみ反応させる */
+        cursor: pointer;
+        touch-action: manipulation; /* モバイルでのタップ反応を改善 */
+       }
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             gap: 20px; z-index: 100; pointer-events: none; /* 一旦ポインタを無効化 */
         }
