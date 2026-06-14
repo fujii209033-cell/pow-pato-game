@@ -30,14 +30,32 @@
     </div>
 
     <script>
-        function debugStart() {
-            alert("スタートボタンが押されました！");
-            document.getElementById("menuContainer").style.display = "none";
-            // ここでinitGame()やgameLoop()を呼ぶ
-            if(typeof initGame === 'function') initGame();
-            if(typeof gameLoop === 'function') gameLoop();
+    function debugStart() {
+        console.log("スタートボタン押下");
+        document.getElementById("menuContainer").style.display = "none";
+
+        try {
+            // 初期化処理
+            if (typeof initGame === 'function') {
+                initGame();
+                console.log("initGame完了");
+            } else {
+                throw new Error("initGame関数が見つかりません");
+            }
+
+            // ゲームループ
+            if (typeof gameLoop === 'function') {
+                gameLoop();
+                console.log("gameLoop開始");
+            } else {
+                throw new Error("gameLoop関数が見つかりません");
+            }
+        } catch (e) {
+            alert("ゲーム開始エラー: " + e.message);
+            console.error(e);
         }
-    </script>
+    }
+</script>
 </body>
 </html>
 
