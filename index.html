@@ -40,7 +40,8 @@ const STATES = {
     CHAR_SELECT: 'CHAR_SELECT',
     PLAY: 'PLAY',
     PAUSE: 'PAUSE',
-    RESULT: 'RESULT'
+    RESULT: 'RESULT',
+    RANKING_VIEW: 'RANKING_VIEW' // ② 過去の記録を見るための新しい画面状態
 };
 let currentState = STATES.TITLE;
 
@@ -107,7 +108,7 @@ const CHARACTER_CONFIG = {
         name: "チェイス",
         color: "#1E3A8A",
         baseSpeed: 5.8,        
-        jumpPower: 11.2,       // ① ジャンプの高さをキビキビ動く適正値に再調整
+        jumpPower: 11.2,       
         maxJumpFrames: 14,     
         images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
     },
@@ -115,7 +116,7 @@ const CHARACTER_CONFIG = {
         name: "マーシャル",
         color: "#DC2626",
         baseSpeed: 5.3,
-        jumpPower: 11.6,       // ① 適正値に調整
+        jumpPower: 11.6,       
         maxJumpFrames: 15,
         images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
     }
@@ -127,8 +128,12 @@ let selectedCharKey = 'chase';
 let isInputPressing = false;
 let jumpCounter = 0; 
 
-// --- ③ 一時停止ボタンの配置定義（ズレを防ぐためサイズを微調整） ---
+// --- ボタンの配置定義（誤作動を防ぐ固定エリア） ---
 const pauseButton = { x: 730, y: 15, width: 50, height: 50 };
+// ② タイトル画面の「過去の記録」ボタンの配置
+const rankingButton = { x: 30, y: 330, width: 160, height: 45 };
+// ② ランキング表示画面から戻るボタンの配置
+const rankingBackButton = { x: 320, y: 320, width: 160, height: 50 };
 
 // --- 画像アセット ---
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
@@ -153,7 +158,19 @@ Object.keys(obstacleImages).forEach(key => {
 // --- ゲーム変数 ---
 let gameFrame = 0; 
 let score = 0;
-let ranking = [15, 10, 5]; 
+
+// ① 【修正】リロードしても消えないようにローカルストレージから記録を読み込む仕組み
+let ranking = [15, 10, 5];
+if (localStorage.getItem("paw_game_ranking")) {
+    try {
+        ranking = JSON.parse(localStorage.getItem("paw_game_ranking"));
+    } catch(e) {
+        ranking = [15, 10, 5];
+    }
+} else {
+    // 初回起動時のみ保存しておく
+    localStorage.setItem("paw_game_ranking", JSON.stringify(ranking));
+}
 
 let player = {
     x: 100, y: 240, width: 60, height: 60, vy: 0, 
@@ -310,7 +327,6 @@ function launchObstacleEffect(obs) {
 }
 
 // --- 更新処理 ---
-// ② カクつきを完全に抑えるため、ブレのない固定フレームレート更新処理に最適化
 function update() {
     if (currentState === STATES.PAUSE) return;
 
@@ -342,7 +358,6 @@ function update() {
 
     player.speedModifier = 1.0; 
 
-    // ① 大ジャンプの強弱の長押し判定をきびきび動くように調整
     if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
         player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames));
         jumpCounter++;
@@ -431,7 +446,12 @@ function triggerJumpEnd() {
 }
 
 function endGame() {
-    ranking.push(score); ranking.sort((a, b) => b - a); ranking = ranking.slice(0, 3);
+    // ① 【修正】新しいスコアを配列に追加して並び替え、ローカルストレージへ即時永久保存
+    ranking.push(score); 
+    ranking.sort((a, b) => b - a); 
+    ranking = ranking.slice(0, 3);
+    localStorage.setItem("paw_game_ranking", JSON.stringify(ranking));
+
     currentState = STATES.RESULT;
     playBgm(audioAssets.bgmClear);
 }
@@ -443,6 +463,7 @@ function draw() {
     else if (currentState === STATES.CHAR_SELECT) drawCharSelectScreen();
     else if (currentState === STATES.PLAY || currentState === STATES.PAUSE) drawPlayScreen(); 
     else if (currentState === STATES.RESULT) drawResultScreen();
+    else if (currentState === STATES.RANKING_VIEW) drawRankingViewScreen(); // ② ランキング画面の描画
 }
 
 function drawTitleScreen() {
@@ -494,8 +515,24 @@ function drawTitleScreen() {
     ctx.font = "bold 24px sans-serif";
     ctx.shadowColor = "rgba(0,0,0,0.5)";
     ctx.shadowBlur = 6;
-    ctx.fillText("👇 タップして スタート！ 👇", canvas.width / 2, 300);
+    ctx.fillText("👇 タップして スタート！ 👇", canvas.width / 2, 280);
     ctx.shadowBlur = 0; 
+
+    // ② 【追加】タイトル画面左下の「🏆 かこのきろく」ボタンの描画
+    ctx.fillStyle = "#FF9F43";
+    ctx.beginPath();
+    ctx.roundRect(rankingButton.x, rankingButton.y, rankingButton.width, rankingButton.height, 12);
+    ctx.fill();
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("🏆 かこのきろく", rankingButton.x + (rankingButton.width / 2), rankingButton.y + (rankingButton.height / 2) + 1);
+    ctx.textBaseline = "alphabetic"; // リセット
 }
 
 function drawCharSelectScreen() {
@@ -577,7 +614,7 @@ function drawPlayScreen() {
     // UIスコア
     let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.fillText(`× ${score}`, 60, 40); }
 
-    // ③ 【修正】一時停止ボタン「⏸️」の文字ズレを完全に修正（配置位置と描画基準を完全に統一）
+    // 一時停止ボタン「⏸️」
     ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     ctx.beginPath();
     ctx.roundRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height, 12);
@@ -587,8 +624,7 @@ function drawPlayScreen() {
     ctx.fillStyle = "#1E293B";
     ctx.font = "bold 20px sans-serif";
     ctx.textAlign = "center";
-    ctx.textBaseline = "middle"; // 上下の基準点を中央にする
-    // 四角形の「中心点」を計算して文字を描画することで絶対にズレないように修正
+    ctx.textBaseline = "middle"; 
     ctx.fillText("⏸️", pauseButton.x + (pauseButton.width / 2), pauseButton.y + (pauseButton.height / 2) + 2);
     ctx.restore();
 
@@ -623,6 +659,40 @@ function drawResultScreen() {
     ctx.font = "18px sans-serif"; ctx.fillStyle = "#94A3B8"; ctx.fillText("画面をタップして 最初にもどる", canvas.width / 2, 370);
 }
 
+// ② 【追加】タイトル画面から見に行ける「過去のきろく専用画面」の描画
+function drawRankingViewScreen() {
+    ctx.fillStyle = "#1E293B"; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#FFD700";
+    ctx.font = "bold 36px sans-serif";
+    ctx.fillText("🏆 かこのきろく ベスト3 🏆", canvas.width / 2, 80);
+
+    // 金銀銅カラーでベスト3をきれいに表示
+    const medalColors = ["#FFD700", "#C0C0C0", "#CD7F32"];
+    ranking.forEach((rankScore, index) => {
+        ctx.fillStyle = medalColors[index] || "#FFFFFF";
+        ctx.font = "bold 28px sans-serif";
+        ctx.fillText(`${index + 1} い :  ${rankScore} こ`, canvas.width / 2, 160 + index * 45);
+    });
+
+    // もどるボタン
+    ctx.fillStyle = "#EF4444";
+    ctx.beginPath();
+    ctx.roundRect(rankingBackButton.x, rankingBackButton.y, rankingBackButton.width, rankingBackButton.height, 15);
+    ctx.fill();
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 20px sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText("もどる", rankingBackButton.x + (rankingBackButton.width / 2), rankingBackButton.y + (rankingBackButton.height / 2));
+    ctx.textBaseline = "alphabetic";
+}
+
 // --- 入力イベント処理 ---
 function handleInputStart(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -634,8 +704,23 @@ function handleInputStart(clientX, clientY) {
     }
 
     if (currentState === STATES.TITLE) {
+        // ② タイトル画面での「かこのきろく」ボタン判定
+        if (clickX >= rankingButton.x && clickX <= rankingButton.x + rankingButton.width &&
+            clickY >= rankingButton.y && clickY <= rankingButton.y + rankingButton.height) {
+            currentState = STATES.RANKING_VIEW;
+            playBgm(audioAssets.bgmTitle);
+            return;
+        }
+
+        // それ以外の場所をタップしたらキャラクター選択へ
         currentState = STATES.CHAR_SELECT;
         playBgm(audioAssets.bgmTitle);
+    } else if (currentState === STATES.RANKING_VIEW) {
+        // ② ランキング画面での「もどる」ボタン判定
+        if (clickX >= rankingBackButton.x && clickX <= rankingBackButton.x + rankingBackButton.width &&
+            clickY >= rankingBackButton.y && clickY <= rankingBackButton.y + rankingBackButton.height) {
+            currentState = STATES.TITLE;
+        }
     } else if (currentState === STATES.CHAR_SELECT) {
         if (clickX >= 0 && clickX < 400 && clickY > 100 && clickY < 360) {
             selectedCharKey = 'chase'; initGame(); currentState = STATES.PLAY;
@@ -671,7 +756,7 @@ window.addEventListener("mouseup", () => {
 
 // タッチイベント（スマホ用）
 window.addEventListener("touchstart", (e) => {
-    if (currentState === STATES.PLAY || currentState === STATES.PAUSE || currentState === STATES.TITLE || currentState === STATES.RESULT) e.preventDefault(); 
+    if (currentState === STATES.PLAY || currentState === STATES.PAUSE || currentState === STATES.TITLE || currentState === STATES.RESULT || currentState === STATES.RANKING_VIEW) e.preventDefault(); 
     if (e.touches.length > 0) {
         handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
     }
@@ -697,16 +782,16 @@ window.addEventListener("keyup", (e) => {
     if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpEnd();
 });
 
-// ② 高速かつブレのない1周1/60秒ターゲットの安定化ゲームループ
+// 高速かつブレのない安定化ゲームループ
 let lastTime = performance.now();
 let accumulatedTime = 0;
-const deltaTimeTarget = 1000 / 60; // 60fps固定
+const deltaTimeTarget = 1000 / 60; 
 
 function gameLoop(timestamp) {
     let elapsed = timestamp - lastTime;
     lastTime = timestamp;
 
-    if (elapsed > 100) elapsed = 100; // 長期放置バグ防止
+    if (elapsed > 100) elapsed = 100; 
     accumulatedTime += elapsed;
 
     while (accumulatedTime >= deltaTimeTarget) {
