@@ -57,7 +57,7 @@ audioAssets.bgmTitle.loop = true;
 audioAssets.bgmPlay.loop = true;
 audioAssets.bgmClear.loop = true;
 
-let currentActiveBgm = null; // 現在再生中のBGMをトラックするための変数
+let currentActiveBgm = null; // 現在再生中のBGM
 
 function playBgm(targetAudio) {
     audioAssets.bgmTitle.pause(); audioAssets.bgmTitle.currentTime = 0;
@@ -66,7 +66,6 @@ function playBgm(targetAudio) {
     
     currentActiveBgm = targetAudio;
     
-    // ドキュメントが可視状態のときのみ再生
     if (document.visibilityState === 'visible') {
         targetAudio.play().catch(e => {});
     }
@@ -77,18 +76,22 @@ function playSe(targetSe) {
     targetSe.play().catch(e => {});
 }
 
-// ① 【新規】ブラウザの最小化・タブ切り替えを検知してBGMを制御するイベント
-document.addEventListener("visibilitychange", () => {
-    if (!currentActiveBgm) return;
-    
-    if (document.visibilityState === 'hidden') {
-        // 画面が裏に隠れたら一時停止（時間はリセットしない）
-        currentActiveBgm.pause();
-    } else if (document.visibilityState === 'visible') {
-        // 画面に戻ってきたら再開
+// ① 【修正】最小化やアプリ切り替え時に確実にBGMを止める仕組み
+function stopBgmOnHide() {
+    if (currentActiveBgm) currentActiveBgm.pause();
+}
+function resumeBgmOnShow() {
+    if (currentActiveBgm && document.visibilityState === 'visible') {
         currentActiveBgm.play().catch(e => {});
     }
+}
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === 'hidden') stopBgmOnHide();
+    else resumeBgmOnShow();
 });
+window.addEventListener("pagehide", stopBgmOnHide);
+window.addEventListener("pageshow", resumeBgmOnShow);
+
 
 // --- キャラクターの定数定義 ---
 const CHARACTER_CONFIG = {
@@ -96,25 +99,25 @@ const CHARACTER_CONFIG = {
         name: "チェイス",
         color: "#1E3A8A",
         baseSpeed: 5.5,
-        jumpPower: 9.0,        // ② 押しっぱなしで上昇させるため、初速を少し優しめに変更
-        maxJumpFrames: 18,     // ② 何フレームまで追加上昇できるか
+        jumpPower: 7.5,        // 短く押したときのジャンプ初速（低め）
+        maxJumpFrames: 22,     // ② 長押しで上昇できる最大フレーム数
         images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
     },
     marshall: {
         name: "マーシャル",
         color: "#DC2626",
         baseSpeed: 5.0,
-        jumpPower: 9.5,
-        maxJumpFrames: 20,
+        jumpPower: 8.0,
+        maxJumpFrames: 24,
         images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
     }
 };
 
 let selectedCharKey = 'chase'; 
 
-// --- 入力検知用のフラグ (② ボタン長押し判定用) ---
+// --- ② 入力長押し判定用変数 ---
 let isInputPressing = false;
-let jumpCounter = 0; // 何フレーム押し続けられているか
+let jumpCounter = 0; 
 
 // --- 画像アセット ---
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
@@ -142,7 +145,8 @@ let score = 0;
 let ranking = [15, 10, 5]; 
 
 let player = {
-    x: 100, y: 240, width: 60, height: 60, vy: 0, gravity: 0.5, // 滞空時間を伸ばすため重力を少し軽めに調整
+    x: 100, y: 240, width: 60, height: 60, vy: 0, 
+    gravity: 0.45, // ② ふんわり大ジャンプさせるため重力を少し優しめに
     isJumping: false, invincibleTimer: 0, speedModifier: 1.0, isFallingInPit: false 
 };
 
@@ -213,7 +217,7 @@ function initGame() {
         });
     }
 
-    // 障害物の先行生成
+    // 障害物配置
     obstacles = [];
     const types = ['car', 'box', 'cone', 'cat', 'puddle', 'pit'];
     for (let i = 0; i < 40; i++) {
@@ -233,32 +237,29 @@ function initGame() {
         obstacles.push({ x: ox, y: obsY, width: obsWidth, height: obsHeight, type: type, active: true });
     }
 
-    // ③ 【修正】クッキーの配置アルゴリズム（出現率にランダム性を持たせ、高所にも配置）
+    // ③ クッキーの出現率・高低ランダム調整
     cookies = [];
     let currentX = 400;
     while (currentX < goalX - 500) {
-        // 次のクッキーの塊までの距離をランダムに離す（これで出現率の疎密を作る）
-        currentX += 120 + Math.random() * 250;
+        currentX += 140 + Math.random() * 260; // 間隔を広げて出現率を調整
 
-        // 35%の確率でクッキーを3〜5個連続（並び）で出現させる
-        if (Math.random() < 0.35) {
+        if (Math.random() < 0.4) {
             let numGroup = Math.floor(Math.random() * 3) + 3;
-            let groupHeightType = Math.random(); // 高さを決めるランダム
+            let groupHeightType = Math.random(); 
 
             for (let j = 0; j < numGroup; j++) {
                 let cx = currentX + j * 45;
                 let groundY = getGroundY(cx);
-                let cy = groundY - 45; // 通常の高さ（走りながら取れる）
+                let cy = groundY - 45; // 地上
 
-                if (groupHeightType < 0.25) {
-                    // ③ 【新規】大ジャンプ、または車・箱を踏んだ時だけ届く「超高所」の配置
-                    cy = groundY - 140 - Math.random() * 30;
-                } else if (groupHeightType < 0.55) {
-                    // 通常のジャンプで届く中くらいの高さ
-                    cy = groundY - 95;
+                if (groupHeightType < 0.3) {
+                    // ③ 踏みつけ大ジャンプや、長押し長めじゃないと届かない「超高いところ」
+                    cy = groundY - 150 - Math.random() * 20;
+                } else if (groupHeightType < 0.6) {
+                    // 普通のプチジャンプ用（中くらい）
+                    cy = groundY - 90;
                 }
 
-                // ちょうどそこが落とし穴のど真ん中の空中でない場合のみ配置
                 cookies.push({ x: cx, y: cy, width: 30, height: 30, collected: false });
             }
             currentX += numGroup * 45;
@@ -320,10 +321,10 @@ function update() {
 
     player.speedModifier = 1.0; 
 
-    // ② 【修正】ジャンプ中にタップ（クリック）が押し続けられていたら上向きの力を加え続ける
+    // ② 【修正】長押しされている間、上方向への追加の力をぐっと強める
     if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
-        // 後半になるにつれて押し上げの力を少しずつ減衰させて自然な放物線にする
-        player.vy -= (charConfig.jumpPower * 0.05) * (1 - (jumpCounter / charConfig.maxJumpFrames));
+        // 長押しフレームに応じて上向きの加速度を追加（パワーを前回の3倍に強化）
+        player.vy -= 0.38 * (1 - (jumpCounter / charConfig.maxJumpFrames));
         jumpCounter++;
     }
 
@@ -379,10 +380,10 @@ function update() {
             if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
                 
-                // 踏んだときは通常より少し高めの固定大ジャンプにする
-                player.vy = -(charConfig.jumpPower * 1.3); 
+                // ③ 踏みつけ時は大ジャンプ（固定で大ジャンプさせて高いクッキーを狙えるように）
+                player.vy = -11.5; 
                 player.isJumping = true;
-                jumpCounter = charConfig.maxJumpFrames; // 踏みつけ時は長押し追加上昇はさせない
+                jumpCounter = charConfig.maxJumpFrames; 
                 
                 launchObstacleEffect(obs);
                 playSe(audioAssets.seJump); 
@@ -399,7 +400,7 @@ function update() {
     if (player.x >= goalX) endGame();
 }
 
-// ② ジャンプ開始処理
+// ② ジャンプ開始
 function triggerJumpStart() {
     if (!player.isJumping && !player.isFallingInPit) {
         const charConfig = CHARACTER_CONFIG[selectedCharKey];
@@ -411,7 +412,7 @@ function triggerJumpStart() {
     }
 }
 
-// ② ジャンプボタン（画面）から指が離れた時の処理
+// ② 指を離した
 function triggerJumpEnd() {
     isInputPressing = false;
 }
@@ -538,11 +539,10 @@ function drawResultScreen() {
     ctx.fillStyle = "#E2E8F0"; ctx.font = "bold 20px sans-serif";
     ctx.fillText("きろく ランキング", canvas.width / 2, 220);
     ranking.forEach((rankScore, index) => { ctx.fillText(`${index + 1}い: ${rankScore} こ`, canvas.width / 2, 260 + index * 30); });
-    ranking.sort((a, b) => b - a);
     ctx.font = "18px sans-serif"; ctx.fillStyle = "#94A3B8"; ctx.fillText("画面をタップして 最初にもどる", canvas.width / 2, 370);
 }
 
-// --- 入力イベント処理（② 長押し対応に切り分け） ---
+// --- 入力イベント処理 ---
 function handleInputStart(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const clickX = (clientX - rect.left) * (canvas.width / rect.width);
@@ -562,7 +562,7 @@ function handleInputStart(clientX, clientY) {
             playBgm(audioAssets.bgmPlay);
         }
     } else if (currentState === STATES.PLAY) {
-        triggerJumpStart(); // ② ジャンプ力を溜め始める
+        triggerJumpStart(); 
     } else if (currentState === STATES.RESULT) {
         currentState = STATES.TITLE;
         playBgm(audioAssets.bgmTitle);
@@ -574,7 +574,7 @@ window.addEventListener("mousedown", (e) => {
     handleInputStart(e.clientX, e.clientY);
 });
 window.addEventListener("mouseup", () => {
-    triggerJumpEnd(); // ② 指を離した
+    triggerJumpEnd(); 
 });
 
 // タッチイベント（スマホ用）
@@ -586,19 +586,15 @@ window.addEventListener("touchstart", (e) => {
 }, { passive: false });
 
 window.addEventListener("touchend", () => {
-    triggerJumpEnd(); // ② 指を離した
+    triggerJumpEnd(); 
 });
 
-// キーボードイベント（PCテスト用）
+// キーボードイベント
 window.addEventListener("keydown", (e) => {
-    if (e.code === "Space" && currentState === STATES.PLAY) {
-        triggerJumpStart();
-    }
+    if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpStart();
 });
 window.addEventListener("keyup", (e) => {
-    if (e.code === "Space" && currentState === STATES.PLAY) {
-        triggerJumpEnd();
-    }
+    if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpEnd();
 });
 
 function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
