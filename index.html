@@ -54,7 +54,7 @@ const audioAssets = {
     seDamage: new Audio("sounds/se_damage.mp3")
 };
 
-// ② 音量の一律統一設定
+// 音量の一律統一設定
 const UNIFORM_VOLUME = 0.5;
 Object.keys(audioAssets).forEach(key => {
     audioAssets[key].volume = UNIFORM_VOLUME;
@@ -65,7 +65,7 @@ audioAssets.bgmPlay.loop = true;
 audioAssets.bgmClear.loop = true;
 
 let currentActiveBgm = null; 
-let isAudioInitialized = false; // ② タイトル画面での再生管理用
+let isAudioInitialized = false; 
 
 function playBgm(targetAudio) {
     audioAssets.bgmTitle.pause(); audioAssets.bgmTitle.currentTime = 0;
@@ -106,16 +106,16 @@ const CHARACTER_CONFIG = {
     chase: {
         name: "チェイス",
         color: "#1E3A8A",
-        baseSpeed: 348,        // ③ なめらか化：1秒あたりの移動ピクセル数に変更(5.8 * 60)
-        jumpPower: 660,       // ③ なめらか化：1秒あたりの上昇パワー
+        baseSpeed: 5.8,        
+        jumpPower: 11.2,       // ① ジャンプの高さをキビキビ動く適正値に再調整
         maxJumpFrames: 14,     
         images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
     },
     marshall: {
         name: "マーシャル",
         color: "#DC2626",
-        baseSpeed: 318,        // (5.3 * 60)
-        jumpPower: 690,       // (11.5 * 60)
+        baseSpeed: 5.3,
+        jumpPower: 11.6,       // ① 適正値に調整
         maxJumpFrames: 15,
         images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
     }
@@ -127,7 +127,7 @@ let selectedCharKey = 'chase';
 let isInputPressing = false;
 let jumpCounter = 0; 
 
-// --- 一時停止ボタンの配置定義（画面右上） ---
+// --- ③ 一時停止ボタンの配置定義（ズレを防ぐためサイズを微調整） ---
 const pauseButton = { x: 730, y: 15, width: 50, height: 50 };
 
 // --- 画像アセット ---
@@ -155,12 +155,9 @@ let gameFrame = 0;
 let score = 0;
 let ranking = [15, 10, 5]; 
 
-// ③ スムーズな描画のための時間管理変数
-let lastTime = performance.now();
-
 let player = {
     x: 100, y: 240, width: 60, height: 60, vy: 0, 
-    gravity: 1950, // ③ なめらか化：1秒あたりの重力加速(0.85 * 60 * 60)
+    gravity: 0.85, 
     isJumping: false, invincibleTimer: 0, speedModifier: 1.0, isFallingInPit: false 
 };
 
@@ -297,8 +294,8 @@ function triggerDamage() {
         score--; 
         droppedCookies.push({
             x: player.x + player.width / 2, y: player.y + player.height / 2,
-            vx: -120 - Math.random() * 180, vy: -420 - Math.random() * 180, 
-            gravity: 1080, rotation: 0, rotSpeed: (Math.random() - 0.5) * 12
+            vx: -2 - Math.random() * 3, vy: -7 - Math.random() * 3, 
+            gravity: 0.5, rotation: 0, rotSpeed: (Math.random() - 0.5) * 0.2
         });
     }
     player.invincibleTimer = 120; 
@@ -308,13 +305,13 @@ function launchObstacleEffect(obs) {
     obs.active = false;
     fallingObstacles.push({
         type: obs.type, x: obs.x, y: obs.y, width: obs.width, height: obs.height,
-        vx: 60 + Math.random() * 180, vy: -360 - Math.random() * 300, gravity: 1290, rotation: 0, rotSpeed: 9 + Math.random() * 9
+        vx: 1 + Math.random() * 3, vy: -6 - Math.random() * 5, gravity: 0.6, rotation: 0, rotSpeed: 0.15 + Math.random() * 0.15
     });
 }
 
 // --- 更新処理 ---
-// ③ dt (秒単位の経過時間) に応じたスムーズな移動・演算処理への書き換え
-function update(dt) {
+// ② カクつきを完全に抑えるため、ブレのない固定フレームレート更新処理に最適化
+function update() {
     if (currentState === STATES.PAUSE) return;
 
     gameFrame++;
@@ -323,19 +320,16 @@ function update(dt) {
 
     const charConfig = CHARACTER_CONFIG[selectedCharKey];
 
-    if (player.invincibleTimer > 0) {
-        player.invincibleTimer -= dt * 60;
-        if (player.invincibleTimer < 0) player.invincibleTimer = 0;
-    }
+    if (player.invincibleTimer > 0) player.invincibleTimer--;
 
-    droppedCookies.forEach(dc => { dc.vy += dc.gravity * dt; dc.x += dc.vx * dt; dc.y += dc.vy * dt; dc.rotation += dc.rotSpeed * dt; });
+    droppedCookies.forEach(dc => { dc.vy += dc.gravity; dc.x += dc.vx; dc.y += dc.vy; dc.rotation += dc.rotSpeed; });
     droppedCookies = droppedCookies.filter(dc => dc.y < 450);
 
-    fallingObstacles.forEach(fo => { fo.vy += fo.gravity * dt; fo.x += fo.vx * dt; fo.y += fo.vy * dt; fo.rotation += fo.rotSpeed * dt; });
+    fallingObstacles.forEach(fo => { fo.vy += fo.gravity; fo.x += fo.vx; fo.y += fo.vy; fo.rotation += fo.rotSpeed; });
     fallingObstacles = fallingObstacles.filter(fo => fo.y < 450);
 
     if (player.isFallingInPit) {
-        player.vy += 1728 * dt; player.y += player.vy * dt;
+        player.vy += 0.8; player.y += player.vy;
         if (player.y > 420) {
             player.isFallingInPit = false;
             player.x = player.pitResetX; 
@@ -348,12 +342,13 @@ function update(dt) {
 
     player.speedModifier = 1.0; 
 
+    // ① 大ジャンプの強弱の長押し判定をきびきび動くように調整
     if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
-        player.vy -= 2340 * (1 - (jumpCounter / charConfig.maxJumpFrames)) * dt;
-        jumpCounter += dt * 60;
+        player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames));
+        jumpCounter++;
     }
 
-    let nextX = player.x + charConfig.baseSpeed * player.speedModifier * dt;
+    let nextX = player.x + charConfig.baseSpeed * player.speedModifier;
     let targetGroundY = getGroundY(nextX);
 
     let currentPit = null;
@@ -365,11 +360,11 @@ function update(dt) {
     });
 
     player.x = nextX;
-    player.vy += player.gravity * dt; player.y += player.vy * dt;
+    player.vy += player.gravity; player.y += player.vy;
 
     if (currentPit) {
         if (player.y >= targetGroundY) {
-            player.isFallingInPit = true; player.vy = 240; 
+            player.isFallingInPit = true; player.vy = 4; 
             player.pitResetX = currentPit.x + currentPit.width + 20; 
             triggerDamage(); 
         }
@@ -400,9 +395,9 @@ function update(dt) {
         if (!isColliding) return;
 
         if (obs.type === 'car' || obs.type === 'box' || obs.type === 'cone') {
-            if (player.vy > 0 && player.y + player.height - (player.vy * dt) <= obs.y + 20) {
+            if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
-                player.vy = -870; 
+                player.vy = -14.5; 
                 player.isJumping = true;
                 jumpCounter = charConfig.maxJumpFrames; 
                 launchObstacleEffect(obs);
@@ -450,9 +445,7 @@ function draw() {
     else if (currentState === STATES.RESULT) drawResultScreen();
 }
 
-// ① 【修正】イラスト調に大幅アップグレードしたタイトル画面
 function drawTitleScreen() {
-    // 青空と太陽のグラデーション背景
     let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
     skyGrad.addColorStop(0, "#00BFFF");
     skyGrad.addColorStop(0.6, "#1E90FF");
@@ -460,7 +453,6 @@ function drawTitleScreen() {
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 背景の白い雲のイラスト描画
     ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
     function drawCloud(cx, cy, scale) {
         ctx.beginPath();
@@ -475,12 +467,10 @@ function drawTitleScreen() {
     drawCloud(620, 80, 1.2);
     drawCloud(340, 60, 0.7);
 
-    // 巨大なパウ・肉球マークの背景エンブレム
-    ctx.fillStyle = "rgba(255, 215, 0, 0.35)"; // ゴールド
+    ctx.fillStyle = "rgba(255, 215, 0, 0.35)"; 
     ctx.beginPath();
-    ctx.arc(400, 150, 65, 0, Math.PI*2); // 手のひら
+    ctx.arc(400, 150, 65, 0, Math.PI*2); 
     ctx.fill();
-    // 指4つ
     ctx.beginPath();
     ctx.arc(330, 100, 22, 0, Math.PI*2);
     ctx.arc(375, 65, 22, 0, Math.PI*2);
@@ -488,29 +478,24 @@ function drawTitleScreen() {
     ctx.arc(470, 100, 22, 0, Math.PI*2);
     ctx.fill();
 
-    // ロゴ風のタイトル飾り（赤フチ＋3D黄文字）
     ctx.textAlign = "center";
-    
-    // 影・立体感を出すための下層テキスト
     ctx.fillStyle = "#A31D1D"; 
     ctx.font = "bold 56px 'Arial Black', sans-serif";
     ctx.fillText("パウ・パトロール ゲーム", canvas.width / 2 + 4, 154);
 
-    // メインのロゴテキスト
     ctx.fillStyle = "#FFD700"; 
     ctx.strokeStyle = "#DC2626"; 
     ctx.lineWidth = 10;
     ctx.strokeText("パウ・パトロール ゲーム", canvas.width / 2, 150);
     ctx.fillText("パウ・パトロール ゲーム", canvas.width / 2, 150);
 
-    // 点滅風のきらきらスタートメッセージ
     let blink = Math.floor(gameFrame / 25) % 2 === 0;
     ctx.fillStyle = blink ? "#FFFFFF" : "#FFE4E1";
     ctx.font = "bold 24px sans-serif";
     ctx.shadowColor = "rgba(0,0,0,0.5)";
     ctx.shadowBlur = 6;
     ctx.fillText("👇 タップして スタート！ 👇", canvas.width / 2, 300);
-    ctx.shadowBlur = 0; // リセット
+    ctx.shadowBlur = 0; 
 }
 
 function drawCharSelectScreen() {
@@ -592,17 +577,20 @@ function drawPlayScreen() {
     // UIスコア
     let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.fillText(`× ${score}`, 60, 40); }
 
-    // 一時停止ボタン「⏸️」
+    // ③ 【修正】一時停止ボタン「⏸️」の文字ズレを完全に修正（配置位置と描画基準を完全に統一）
     ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     ctx.beginPath();
     ctx.roundRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height, 12);
     ctx.fill();
+    
+    ctx.save();
     ctx.fillStyle = "#1E293B";
-    ctx.font = "bold 22px sans-serif";
+    ctx.font = "bold 20px sans-serif";
     ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("⏸️", pauseButton.x + pauseButton.width / 2, pauseButton.y + pauseButton.height / 2);
-    ctx.textBaseline = "alphabetic";
+    ctx.textBaseline = "middle"; // 上下の基準点を中央にする
+    // 四角形の「中心点」を計算して文字を描画することで絶対にズレないように修正
+    ctx.fillText("⏸️", pauseButton.x + (pauseButton.width / 2), pauseButton.y + (pauseButton.height / 2) + 2);
+    ctx.restore();
 
     // 一時停止中のオーバーレイ
     if (currentState === STATES.PAUSE) {
@@ -641,7 +629,6 @@ function handleInputStart(clientX, clientY) {
     const clickX = (clientX - rect.left) * (canvas.width / rect.width);
     const clickY = (clientY - rect.top) * (canvas.height / rect.height);
 
-    // ② 【修正】一番最初のタイトル画面タップでオーディオを即座に有効化してBGM開始
     if (!isAudioInitialized) {
         isAudioInitialized = true;
     }
@@ -710,16 +697,23 @@ window.addEventListener("keyup", (e) => {
     if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpEnd();
 });
 
-// ③ 【修正】デルタタイム（フレーム間の時間差）を計算してなめらかに動かすループ構造
-function gameLoop() {
-    let now = performance.now();
-    let dt = (now - lastTime) / 1000; // 秒単位に変換
-    lastTime = now;
+// ② 高速かつブレのない1周1/60秒ターゲットの安定化ゲームループ
+let lastTime = performance.now();
+let accumulatedTime = 0;
+const deltaTimeTarget = 1000 / 60; // 60fps固定
 
-    // 極端なラグ（タブ移動の放置など）によるバグを防ぐ上限キャップ
-    if (dt > 0.1) dt = 0.1;
+function gameLoop(timestamp) {
+    let elapsed = timestamp - lastTime;
+    lastTime = timestamp;
 
-    update(dt);
+    if (elapsed > 100) elapsed = 100; // 長期放置バグ防止
+    accumulatedTime += elapsed;
+
+    while (accumulatedTime >= deltaTimeTarget) {
+        update();
+        accumulatedTime -= deltaTimeTarget;
+    }
+
     draw();
     requestAnimationFrame(gameLoop);
 }
