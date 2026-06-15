@@ -57,7 +57,7 @@ audioAssets.bgmTitle.loop = true;
 audioAssets.bgmPlay.loop = true;
 audioAssets.bgmClear.loop = true;
 
-let currentActiveBgm = null; // 現在再生中のBGM
+let currentActiveBgm = null; 
 
 function playBgm(targetAudio) {
     audioAssets.bgmTitle.pause(); audioAssets.bgmTitle.currentTime = 0;
@@ -76,7 +76,6 @@ function playSe(targetSe) {
     targetSe.play().catch(e => {});
 }
 
-// ① 【修正】最小化やアプリ切り替え時に確実にBGMを止める仕組み
 function stopBgmOnHide() {
     if (currentActiveBgm) currentActiveBgm.pause();
 }
@@ -98,24 +97,24 @@ const CHARACTER_CONFIG = {
     chase: {
         name: "チェイス",
         color: "#1E3A8A",
-        baseSpeed: 5.5,
-        jumpPower: 7.5,        // 短く押したときのジャンプ初速（低め）
-        maxJumpFrames: 22,     // ② 長押しで上昇できる最大フレーム数
+        baseSpeed: 5.8,        // テンポを良くするため移動速度もわずかにアップ
+        jumpPower: 11.0,       // ② スピーディーにするため初速を大幅に強化
+        maxJumpFrames: 14,     // ② キビキビ落とすため、長押し有効フレームは短くシャープに
         images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
     },
     marshall: {
         name: "マーシャル",
         color: "#DC2626",
-        baseSpeed: 5.0,
-        jumpPower: 8.0,
-        maxJumpFrames: 24,
+        baseSpeed: 5.3,
+        jumpPower: 11.5,
+        maxJumpFrames: 15,
         images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
     }
 };
 
 let selectedCharKey = 'chase'; 
 
-// --- ② 入力長押し判定用変数 ---
+// --- 入力長押し判定用変数 ---
 let isInputPressing = false;
 let jumpCounter = 0; 
 
@@ -146,7 +145,7 @@ let ranking = [15, 10, 5];
 
 let player = {
     x: 100, y: 240, width: 60, height: 60, vy: 0, 
-    gravity: 0.45, // ② ふんわり大ジャンプさせるため重力を少し優しめに
+    gravity: 0.85, // ② もっさり感を無くすため重力を「0.45 → 0.85」へ大幅強化（キビキビ落下します）
     isJumping: false, invincibleTimer: 0, speedModifier: 1.0, isFallingInPit: false 
 };
 
@@ -237,33 +236,51 @@ function initGame() {
         obstacles.push({ x: ox, y: obsY, width: obsWidth, height: obsHeight, type: type, active: true });
     }
 
-    // ③ クッキーの出現率・高低ランダム調整
+    // ① クッキーの出現バランス大幅調整
     cookies = [];
     let currentX = 400;
     while (currentX < goalX - 500) {
-        currentX += 140 + Math.random() * 260; // 間隔を広げて出現率を調整
+        // 次の配置ポイントまでの間隔を少し詰めて、全体数をアップ
+        currentX += 80 + Math.random() * 140; 
 
-        if (Math.random() < 0.4) {
-            let numGroup = Math.floor(Math.random() * 3) + 3;
-            let groupHeightType = Math.random(); 
+        // 近くにある障害物を探す
+        let nearObs = obstacles.find(obs => Math.abs(obs.x - currentX) < 180);
+        
+        let numGroup = Math.floor(Math.random() * 2) + 3; // 3〜4個の塊
+        let groupHeightType = Math.random();
 
-            for (let j = 0; j < numGroup; j++) {
-                let cx = currentX + j * 45;
-                let groundY = getGroundY(cx);
-                let cy = groundY - 45; // 地上
+        for (let j = 0; j < numGroup; j++) {
+            let cx = currentX + j * 42;
+            let groundY = getGroundY(cx);
+            let cy = groundY - 45; // 地上のデフォルト
 
-                if (groupHeightType < 0.3) {
-                    // ③ 踏みつけ大ジャンプや、長押し長めじゃないと届かない「超高いところ」
-                    cy = groundY - 150 - Math.random() * 20;
-                } else if (groupHeightType < 0.6) {
-                    // 普通のプチジャンプ用（中くらい）
+            if (nearObs) {
+                // 障害物が近くにある場合
+                if (nearObs.type === 'puddle') {
+                    // 水たまり：踏めないので、飛び越える放物線に合わせた中くらいの高さに配置
+                    cy = groundY - 95;
+                } else if (nearObs.type === 'pit') {
+                    // 落とし穴：穴をジャンプで超える位置に配置
                     cy = groundY - 90;
+                } else if (nearObs.type === 'car' || nearObs.type === 'box' || nearObs.type === 'cone') {
+                    // 踏める障害物：踏みつけジャンプで取れる高い位置、または手前の飛び越し位置
+                    if (groupHeightType < 0.5) {
+                        cy = groundY - 155; // 踏みつけ大ジャンプ用（超高所）
+                    } else {
+                        cy = groundY - 95;  // 通常の飛び越し用（中高所）
+                    }
                 }
+            } else {
+                // 周りに何もないプレーンな道中：地上と中くらいをバランスよく配置
+                if (groupHeightType < 0.4) cy = groundY - 85; 
+            }
 
+            // マップの外や落とし穴の底には配置しない
+            if (cy < 350) {
                 cookies.push({ x: cx, y: cy, width: 30, height: 30, collected: false });
             }
-            currentX += numGroup * 45;
         }
+        currentX += numGroup * 42;
     }
 }
 
@@ -308,7 +325,7 @@ function update() {
 
     // 落とし穴落下中
     if (player.isFallingInPit) {
-        player.vy += 0.6; player.y += player.vy;
+        player.vy += 0.8; player.y += player.vy;
         if (player.y > 420) {
             player.isFallingInPit = false;
             player.x = player.pitResetX; 
@@ -321,10 +338,9 @@ function update() {
 
     player.speedModifier = 1.0; 
 
-    // ② 【修正】長押しされている間、上方向への追加の力をぐっと強める
+    // ② 【修正】長押し中の追加浮遊パワーも重力に合わせてクイックに調整
     if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
-        // 長押しフレームに応じて上向きの加速度を追加（パワーを前回の3倍に強化）
-        player.vy -= 0.38 * (1 - (jumpCounter / charConfig.maxJumpFrames));
+        player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames));
         jumpCounter++;
     }
 
@@ -344,7 +360,7 @@ function update() {
 
     if (currentPit) {
         if (player.y >= targetGroundY) {
-            player.isFallingInPit = true; player.vy = 3; 
+            player.isFallingInPit = true; player.vy = 4; 
             player.pitResetX = currentPit.x + currentPit.width + 20; 
             triggerDamage(); 
         }
@@ -380,8 +396,8 @@ function update() {
             if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
                 
-                // ③ 踏みつけ時は大ジャンプ（固定で大ジャンプさせて高いクッキーを狙えるように）
-                player.vy = -11.5; 
+                // ①・② 踏みつけ大ジャンプもキビキビと、より高く跳ねる（高所のクッキーが取れるように）
+                player.vy = -14.5; 
                 player.isJumping = true;
                 jumpCounter = charConfig.maxJumpFrames; 
                 
@@ -400,7 +416,7 @@ function update() {
     if (player.x >= goalX) endGame();
 }
 
-// ② ジャンプ開始
+// ② ジャンプ開始（初速を速くしてスピーディーに）
 function triggerJumpStart() {
     if (!player.isJumping && !player.isFallingInPit) {
         const charConfig = CHARACTER_CONFIG[selectedCharKey];
@@ -412,7 +428,6 @@ function triggerJumpStart() {
     }
 }
 
-// ② 指を離した
 function triggerJumpEnd() {
     isInputPressing = false;
 }
@@ -553,11 +568,13 @@ function handleInputStart(clientX, clientY) {
         playBgm(audioAssets.bgmTitle);
     } else if (currentState === STATES.CHAR_SELECT) {
         if (clickX >= charButtons.chase.x && clickX <= charButtons.chase.x + charButtons.chase.width &&
-            clickY >= charButtons.chase.y && clickY <= charButtons.chase.y + charButtons.chase.height) {
+            clickY >= charButtons.charButtons.chase.y && clickY <= charButtons.chase.y + charButtons.chase.height) {
+            // 安全対策として押し間違え防止用に直接キーで判定
+        }
+        if (clickX > 0 && clickX < 400 && clickY > 120 && clickY < 340) {
             selectedCharKey = 'chase'; initGame(); currentState = STATES.PLAY;
             playBgm(audioAssets.bgmPlay);
-        } else if (clickX >= charButtons.marshall.x && clickX <= charButtons.marshall.x + charButtons.marshall.width &&
-                   clickY >= charButtons.marshall.y && clickY <= charButtons.marshall.y + charButtons.marshall.height) {
+        } else if (clickX >= 400 && clickX < 800 && clickY > 120 && clickY < 340) {
             selectedCharKey = 'marshall'; initGame(); currentState = STATES.PLAY;
             playBgm(audioAssets.bgmPlay);
         }
