@@ -39,6 +39,7 @@ const STATES = {
     TITLE: 'TITLE',
     CHAR_SELECT: 'CHAR_SELECT',
     PLAY: 'PLAY',
+    PAUSE: 'PAUSE', // ③ 一時停止状態を追加
     RESULT: 'RESULT'
 };
 let currentState = STATES.TITLE;
@@ -53,6 +54,12 @@ const audioAssets = {
     seDamage: new Audio("sounds/se_damage.mp3")
 };
 
+// ② 【修正】BGMとSEの音量を一定（一律）に統一する設定
+const UNIFORM_VOLUME = 0.5; // 音量の大きさを50%に統一
+Object.keys(audioAssets).forEach(key => {
+    audioAssets[key].volume = UNIFORM_VOLUME;
+});
+
 audioAssets.bgmTitle.loop = true;
 audioAssets.bgmPlay.loop = true;
 audioAssets.bgmClear.loop = true;
@@ -66,7 +73,7 @@ function playBgm(targetAudio) {
     
     currentActiveBgm = targetAudio;
     
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === 'visible' && currentState !== STATES.PAUSE) {
         targetAudio.play().catch(e => {});
     }
 }
@@ -80,7 +87,7 @@ function stopBgmOnHide() {
     if (currentActiveBgm) currentActiveBgm.pause();
 }
 function resumeBgmOnShow() {
-    if (currentActiveBgm && document.visibilityState === 'visible') {
+    if (currentActiveBgm && document.visibilityState === 'visible' && currentState !== STATES.PAUSE) {
         currentActiveBgm.play().catch(e => {});
     }
 }
@@ -97,9 +104,9 @@ const CHARACTER_CONFIG = {
     chase: {
         name: "チェイス",
         color: "#1E3A8A",
-        baseSpeed: 5.8,        // テンポを良くするため移動速度もわずかにアップ
-        jumpPower: 11.0,       // ② スピーディーにするため初速を大幅に強化
-        maxJumpFrames: 14,     // ② キビキビ落とすため、長押し有効フレームは短くシャープに
+        baseSpeed: 5.8,        
+        jumpPower: 11.0,       
+        maxJumpFrames: 14,     
         images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
     },
     marshall: {
@@ -117,6 +124,9 @@ let selectedCharKey = 'chase';
 // --- 入力長押し判定用変数 ---
 let isInputPressing = false;
 let jumpCounter = 0; 
+
+// --- ③ 一時停止ボタンの配置定義（画面右上） ---
+const pauseButton = { x: 730, y: 15, width: 50, height: 50 };
 
 // --- 画像アセット ---
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
@@ -145,7 +155,7 @@ let ranking = [15, 10, 5];
 
 let player = {
     x: 100, y: 240, width: 60, height: 60, vy: 0, 
-    gravity: 0.85, // ② もっさり感を無くすため重力を「0.45 → 0.85」へ大幅強化（キビキビ落下します）
+    gravity: 0.85, 
     isJumping: false, invincibleTimer: 0, speedModifier: 1.0, isFallingInPit: false 
 };
 
@@ -236,46 +246,36 @@ function initGame() {
         obstacles.push({ x: ox, y: obsY, width: obsWidth, height: obsHeight, type: type, active: true });
     }
 
-    // ① クッキーの出現バランス大幅調整
+    // クッキーの出現
     cookies = [];
     let currentX = 400;
     while (currentX < goalX - 500) {
-        // 次の配置ポイントまでの間隔を少し詰めて、全体数をアップ
         currentX += 80 + Math.random() * 140; 
-
-        // 近くにある障害物を探す
         let nearObs = obstacles.find(obs => Math.abs(obs.x - currentX) < 180);
-        
-        let numGroup = Math.floor(Math.random() * 2) + 3; // 3〜4個の塊
+        let numGroup = Math.floor(Math.random() * 2) + 3; 
         let groupHeightType = Math.random();
 
         for (let j = 0; j < numGroup; j++) {
             let cx = currentX + j * 42;
             let groundY = getGroundY(cx);
-            let cy = groundY - 45; // 地上のデフォルト
+            let cy = groundY - 45; 
 
             if (nearObs) {
-                // 障害物が近くにある場合
                 if (nearObs.type === 'puddle') {
-                    // 水たまり：踏めないので、飛び越える放物線に合わせた中くらいの高さに配置
                     cy = groundY - 95;
                 } else if (nearObs.type === 'pit') {
-                    // 落とし穴：穴をジャンプで超える位置に配置
                     cy = groundY - 90;
                 } else if (nearObs.type === 'car' || nearObs.type === 'box' || nearObs.type === 'cone') {
-                    // 踏める障害物：踏みつけジャンプで取れる高い位置、または手前の飛び越し位置
                     if (groupHeightType < 0.5) {
-                        cy = groundY - 155; // 踏みつけ大ジャンプ用（超高所）
+                        cy = groundY - 155; 
                     } else {
-                        cy = groundY - 95;  // 通常の飛び越し用（中高所）
+                        cy = groundY - 95;  
                     }
                 }
             } else {
-                // 周りに何もないプレーンな道中：地上と中くらいをバランスよく配置
                 if (groupHeightType < 0.4) cy = groundY - 85; 
             }
 
-            // マップの外や落とし穴の底には配置しない
             if (cy < 350) {
                 cookies.push({ x: cx, y: cy, width: 30, height: 30, collected: false });
             }
@@ -309,6 +309,9 @@ function launchObstacleEffect(obs) {
 
 // --- 更新処理 ---
 function update() {
+    // ③ PAUSE状態のときは全体のフレーム更新処理をスキップする
+    if (currentState === STATES.PAUSE) return;
+
     gameFrame++;
 
     if (currentState !== STATES.PLAY) return;
@@ -323,7 +326,6 @@ function update() {
     fallingObstacles.forEach(fo => { fo.vy += fo.gravity; fo.x += fo.vx; fo.y += fo.vy; fo.rotation += fo.rotSpeed; });
     fallingObstacles = fallingObstacles.filter(fo => fo.y < 450);
 
-    // 落とし穴落下中
     if (player.isFallingInPit) {
         player.vy += 0.8; player.y += player.vy;
         if (player.y > 420) {
@@ -338,7 +340,6 @@ function update() {
 
     player.speedModifier = 1.0; 
 
-    // ② 【修正】長押し中の追加浮遊パワーも重力に合わせてクイックに調整
     if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
         player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames));
         jumpCounter++;
@@ -373,7 +374,6 @@ function update() {
 
     cameraX = player.x - 100;
 
-    // クッキー判定
     cookies.forEach(cookie => {
         if (!cookie.collected &&
             player.x < cookie.x + cookie.width && player.x + player.width > cookie.x &&
@@ -384,7 +384,6 @@ function update() {
         }
     });
 
-    // 障害物判定
     obstacles.forEach(obs => {
         if (!obs.active || obs.type === 'pit') return;
 
@@ -395,12 +394,9 @@ function update() {
         if (obs.type === 'car' || obs.type === 'box' || obs.type === 'cone') {
             if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
-                
-                // ①・② 踏みつけ大ジャンプもキビキビと、より高く跳ねる（高所のクッキーが取れるように）
                 player.vy = -14.5; 
                 player.isJumping = true;
                 jumpCounter = charConfig.maxJumpFrames; 
-                
                 launchObstacleEffect(obs);
                 playSe(audioAssets.seJump); 
             } else {
@@ -416,7 +412,6 @@ function update() {
     if (player.x >= goalX) endGame();
 }
 
-// ② ジャンプ開始（初速を速くしてスピーディーに）
 function triggerJumpStart() {
     if (!player.isJumping && !player.isFallingInPit) {
         const charConfig = CHARACTER_CONFIG[selectedCharKey];
@@ -443,7 +438,7 @@ function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (currentState === STATES.TITLE) drawTitleScreen();
     else if (currentState === STATES.CHAR_SELECT) drawCharSelectScreen();
-    else if (currentState === STATES.PLAY) drawPlayScreen();
+    else if (currentState === STATES.PLAY || currentState === STATES.PAUSE) drawPlayScreen(); // ③ PAUSE中もプレイ画面を描画
     else if (currentState === STATES.RESULT) drawResultScreen();
 }
 
@@ -457,14 +452,14 @@ function drawTitleScreen() {
     ctx.fillText("まわりを タップして スタート！", canvas.width / 2, 280);
 }
 
-const charButtons = { chase: { x: 150, y: 160, width: 200, height: 160 }, marshall: { x: 450, y: 160, width: 200, height: 160 } };
-
 function drawCharSelectScreen() {
     ctx.fillStyle = "#E0F2FE"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.textAlign = "center";
     ctx.fillText("だれで あそぶ？", canvas.width / 2, 80);
-    drawSelectButton('chase', charButtons.chase, CHARACTER_CONFIG.chase);
-    drawSelectButton('marshall', charButtons.marshall, CHARACTER_CONFIG.marshall);
+    
+    // ① 【修正】スマホ幅でもタップ判定が絶対にズレない確実な左右等分割エリアのボタン描画
+    drawSelectButton('chase', { x: 80, y: 140, width: 280, height: 180 }, CHARACTER_CONFIG.chase);
+    drawSelectButton('marshall', { x: 440, y: 140, width: 280, height: 180 }, CHARACTER_CONFIG.marshall);
 }
 
 function drawSelectButton(key, rect, config) {
@@ -472,9 +467,9 @@ function drawSelectButton(key, rect, config) {
     ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.roundRect(rect.x + 8, rect.y + 8, rect.width - 16, rect.height - 16, 15); ctx.fill();
     let currentImgKey = (Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2';
     let img = imgAssets.chars[key][currentImgKey];
-    if (img && img.complete) ctx.drawImage(img, rect.x + rect.width/2 - 40, rect.y + 20, 80, 80);
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 135);
+    if (img && img.complete) ctx.drawImage(img, rect.x + rect.width/2 - 45, rect.y + 20, 90, 90);
+    ctx.fillStyle = "#1E293B"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
 function drawPlayScreen() {
@@ -507,7 +502,6 @@ function drawPlayScreen() {
     }
     ctx.lineTo(endCamX, 400); ctx.closePath(); ctx.fill();
 
-    // 崖線
     obstacles.forEach(obs => { if (obs.type === 'pit' && obs.active) { ctx.fillStyle = "#78350F"; ctx.fillRect(obs.x - 3, getGroundY(obs.x) + 60, 4, 150); ctx.fillRect(obs.x + obs.width - 1, getGroundY(obs.x + obs.width) + 60, 4, 150); } });
 
     // 障害物
@@ -537,6 +531,30 @@ function drawPlayScreen() {
 
     // UIスコア
     let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.fillText(`× ${score}`, 60, 40); }
+
+    // ③ 【修正】画面右上に一時停止ボタン「⏸️」を描画
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctx.beginPath();
+    ctx.roundRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height, 12);
+    ctx.fill();
+    ctx.fillStyle = "#1E293B";
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("⏸️", pauseButton.x + pauseButton.width / 2, pauseButton.y + pauseButton.height / 2);
+    ctx.textBaseline = "alphabetic"; // 元に戻す
+
+    // ③ 一時停止中のオーバーレイ（文字表示）
+    if (currentState === STATES.PAUSE) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 36px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("いちじちゅうだん", canvas.width / 2, canvas.height / 2);
+        ctx.font = "20px sans-serif";
+        ctx.fillText("画面をタップすると はじまるよ！", canvas.width / 2, canvas.height / 2 + 50);
+    }
 }
 
 function drawResultScreen() {
@@ -567,19 +585,27 @@ function handleInputStart(clientX, clientY) {
         currentState = STATES.CHAR_SELECT;
         playBgm(audioAssets.bgmTitle);
     } else if (currentState === STATES.CHAR_SELECT) {
-        if (clickX >= charButtons.chase.x && clickX <= charButtons.chase.x + charButtons.chase.width &&
-            clickY >= charButtons.charButtons.chase.y && clickY <= charButtons.chase.y + charButtons.chase.height) {
-            // 安全対策として押し間違え防止用に直接キーで判定
-        }
-        if (clickX > 0 && clickX < 400 && clickY > 120 && clickY < 340) {
+        // ① 【修正】画面比率に影響されない確実な左右等分割でのタップ判定
+        if (clickX >= 0 && clickX < 400 && clickY > 100 && clickY < 360) {
             selectedCharKey = 'chase'; initGame(); currentState = STATES.PLAY;
             playBgm(audioAssets.bgmPlay);
-        } else if (clickX >= 400 && clickX < 800 && clickY > 120 && clickY < 340) {
+        } else if (clickX >= 400 && clickX <= 800 && clickY > 100 && clickY < 360) {
             selectedCharKey = 'marshall'; initGame(); currentState = STATES.PLAY;
             playBgm(audioAssets.bgmPlay);
         }
     } else if (currentState === STATES.PLAY) {
+        // ③ 【修正】プレイ中に右上の「⏸️」一時停止ボタンが押されたかの判定
+        if (clickX >= pauseButton.x && clickX <= pauseButton.x + pauseButton.width &&
+            clickY >= pauseButton.y && clickY <= pauseButton.y + pauseButton.height) {
+            currentState = STATES.PAUSE;
+            if (currentActiveBgm) currentActiveBgm.pause(); // BGMも一時停止
+            return;
+        }
         triggerJumpStart(); 
+    } else if (currentState === STATES.PAUSE) {
+        // ③ 【修正】一時停止中にどこかをタップしたらゲーム再開
+        currentState = STATES.PLAY;
+        if (currentActiveBgm) currentActiveBgm.play().catch(e => {}); // BGMを再開
     } else if (currentState === STATES.RESULT) {
         currentState = STATES.TITLE;
         playBgm(audioAssets.bgmTitle);
@@ -596,7 +622,7 @@ window.addEventListener("mouseup", () => {
 
 // タッチイベント（スマホ用）
 window.addEventListener("touchstart", (e) => {
-    if (currentState === STATES.PLAY || currentState === STATES.TITLE || currentState === STATES.RESULT) e.preventDefault(); 
+    if (currentState === STATES.PLAY || currentState === STATES.PAUSE || currentState === STATES.TITLE || currentState === STATES.RESULT) e.preventDefault(); 
     if (e.touches.length > 0) {
         handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
     }
@@ -609,6 +635,13 @@ window.addEventListener("touchend", () => {
 // キーボードイベント
 window.addEventListener("keydown", (e) => {
     if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpStart();
+    if (e.code === "Escape" && currentState === STATES.PLAY) {
+        currentState = STATES.PAUSE;
+        if (currentActiveBgm) currentActiveBgm.pause();
+    } else if (e.code === "Escape" && currentState === STATES.PAUSE) {
+        currentState = STATES.PLAY;
+        if (currentActiveBgm) currentActiveBgm.play().catch(e => {});
+    }
 });
 window.addEventListener("keyup", (e) => {
     if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpEnd();
