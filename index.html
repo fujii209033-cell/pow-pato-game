@@ -43,7 +43,7 @@ const STATES = {
 };
 let currentState = STATES.TITLE;
 
-// --- ② オーディオアセットの定義と読み込み ---
+// --- オーディオアセット ---
 const audioAssets = {
     bgmTitle: new Audio("sounds/bgm_title.mp3"),
     bgmPlay: new Audio("sounds/bgm_play.mp3"),
@@ -53,27 +53,42 @@ const audioAssets = {
     seDamage: new Audio("sounds/se_damage.mp3")
 };
 
-// BGMはループ再生を有効にする
 audioAssets.bgmTitle.loop = true;
 audioAssets.bgmPlay.loop = true;
 audioAssets.bgmClear.loop = true;
 
-// BGMを切り替えるためのヘルパー関数
+let currentActiveBgm = null; // 現在再生中のBGMをトラックするための変数
+
 function playBgm(targetAudio) {
-    // すべてのBGMを一旦停止して時間を巻き戻す
     audioAssets.bgmTitle.pause(); audioAssets.bgmTitle.currentTime = 0;
     audioAssets.bgmPlay.pause();  audioAssets.bgmPlay.currentTime = 0;
     audioAssets.bgmClear.pause(); audioAssets.bgmClear.currentTime = 0;
     
-    // 対象のBGMを再生（エラー防止用のcatch付き）
-    targetAudio.play().catch(e => console.log("ユーザー操作前に再生がブロックされました"));
+    currentActiveBgm = targetAudio;
+    
+    // ドキュメントが可視状態のときのみ再生
+    if (document.visibilityState === 'visible') {
+        targetAudio.play().catch(e => {});
+    }
 }
 
-// SEを鳴らす関数（連続再生に対応できるよう巻き戻してから鳴らす）
 function playSe(targetSe) {
     targetSe.currentTime = 0;
     targetSe.play().catch(e => {});
 }
+
+// ① 【新規】ブラウザの最小化・タブ切り替えを検知してBGMを制御するイベント
+document.addEventListener("visibilitychange", () => {
+    if (!currentActiveBgm) return;
+    
+    if (document.visibilityState === 'hidden') {
+        // 画面が裏に隠れたら一時停止（時間はリセットしない）
+        currentActiveBgm.pause();
+    } else if (document.visibilityState === 'visible') {
+        // 画面に戻ってきたら再開
+        currentActiveBgm.play().catch(e => {});
+    }
+});
 
 // --- キャラクターの定数定義 ---
 const CHARACTER_CONFIG = {
@@ -81,19 +96,25 @@ const CHARACTER_CONFIG = {
         name: "チェイス",
         color: "#1E3A8A",
         baseSpeed: 5.5,
-        jumpPower: 13.5,
+        jumpPower: 9.0,        // ② 押しっぱなしで上昇させるため、初速を少し優しめに変更
+        maxJumpFrames: 18,     // ② 何フレームまで追加上昇できるか
         images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
     },
     marshall: {
         name: "マーシャル",
         color: "#DC2626",
         baseSpeed: 5.0,
-        jumpPower: 14.5,
+        jumpPower: 9.5,
+        maxJumpFrames: 20,
         images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
     }
 };
 
 let selectedCharKey = 'chase'; 
+
+// --- 入力検知用のフラグ (② ボタン長押し判定用) ---
+let isInputPressing = false;
+let jumpCounter = 0; // 何フレーム押し続けられているか
 
 // --- 画像アセット ---
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
@@ -121,7 +142,7 @@ let score = 0;
 let ranking = [15, 10, 5]; 
 
 let player = {
-    x: 100, y: 240, width: 60, height: 60, vy: 0, gravity: 0.65, 
+    x: 100, y: 240, width: 60, height: 60, vy: 0, gravity: 0.5, // 滞空時間を伸ばすため重力を少し軽めに調整
     isJumping: false, invincibleTimer: 0, speedModifier: 1.0, isFallingInPit: false 
 };
 
@@ -158,6 +179,7 @@ function initGame() {
     player.isFallingInPit = false;
     droppedCookies = [];
     fallingObstacles = [];
+    jumpCounter = 0;
 
     // 坂道データ
     slopePoints = [];
@@ -191,16 +213,7 @@ function initGame() {
         });
     }
 
-    // クッキー
-    cookies = [];
-    for (let i = 0; i < 100; i++) {
-        let cx = 400 + i * 145 + Math.random() * 30;
-        cookies.push({
-            x: cx, y: getGroundY(cx) - 40 - Math.random() * 70, width: 30, height: 30, collected: false
-        });
-    }
-
-    // 障害物
+    // 障害物の先行生成
     obstacles = [];
     const types = ['car', 'box', 'cone', 'cat', 'puddle', 'pit'];
     for (let i = 0; i < 40; i++) {
@@ -219,12 +232,42 @@ function initGame() {
 
         obstacles.push({ x: ox, y: obsY, width: obsWidth, height: obsHeight, type: type, active: true });
     }
+
+    // ③ 【修正】クッキーの配置アルゴリズム（出現率にランダム性を持たせ、高所にも配置）
+    cookies = [];
+    let currentX = 400;
+    while (currentX < goalX - 500) {
+        // 次のクッキーの塊までの距離をランダムに離す（これで出現率の疎密を作る）
+        currentX += 120 + Math.random() * 250;
+
+        // 35%の確率でクッキーを3〜5個連続（並び）で出現させる
+        if (Math.random() < 0.35) {
+            let numGroup = Math.floor(Math.random() * 3) + 3;
+            let groupHeightType = Math.random(); // 高さを決めるランダム
+
+            for (let j = 0; j < numGroup; j++) {
+                let cx = currentX + j * 45;
+                let groundY = getGroundY(cx);
+                let cy = groundY - 45; // 通常の高さ（走りながら取れる）
+
+                if (groupHeightType < 0.25) {
+                    // ③ 【新規】大ジャンプ、または車・箱を踏んだ時だけ届く「超高所」の配置
+                    cy = groundY - 140 - Math.random() * 30;
+                } else if (groupHeightType < 0.55) {
+                    // 通常のジャンプで届く中くらいの高さ
+                    cy = groundY - 95;
+                }
+
+                // ちょうどそこが落とし穴のど真ん中の空中でない場合のみ配置
+                cookies.push({ x: cx, y: cy, width: 30, height: 30, collected: false });
+            }
+            currentX += numGroup * 45;
+        }
+    }
 }
 
 function triggerDamage() {
-    // ② 障害物接触時・落下時のSE
     playSe(audioAssets.seDamage);
-
     if (player.invincibleTimer > 0) return; 
     
     if (score > 0) {
@@ -277,6 +320,13 @@ function update() {
 
     player.speedModifier = 1.0; 
 
+    // ② 【修正】ジャンプ中にタップ（クリック）が押し続けられていたら上向きの力を加え続ける
+    if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
+        // 後半になるにつれて押し上げの力を少しずつ減衰させて自然な放物線にする
+        player.vy -= (charConfig.jumpPower * 0.05) * (1 - (jumpCounter / charConfig.maxJumpFrames));
+        jumpCounter++;
+    }
+
     let nextX = player.x + charConfig.baseSpeed * player.speedModifier;
     let targetGroundY = getGroundY(nextX);
 
@@ -295,7 +345,7 @@ function update() {
         if (player.y >= targetGroundY) {
             player.isFallingInPit = true; player.vy = 3; 
             player.pitResetX = currentPit.x + currentPit.width + 20; 
-            triggerDamage(); // 落下時も接触SEとダメージ
+            triggerDamage(); 
         }
     } else {
         let currentGroundY = getGroundY(player.x);
@@ -313,7 +363,6 @@ function update() {
             player.y < cookie.y + cookie.height && player.y + player.height > cookie.y) {
             cookie.collected = true;
             score++;
-            // ② クッキー取得時のSE
             playSe(audioAssets.seCookie);
         }
     });
@@ -329,9 +378,14 @@ function update() {
         if (obs.type === 'car' || obs.type === 'box' || obs.type === 'cone') {
             if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
-                player.vy = -charConfig.jumpPower; player.isJumping = true;
+                
+                // 踏んだときは通常より少し高めの固定大ジャンプにする
+                player.vy = -(charConfig.jumpPower * 1.3); 
+                player.isJumping = true;
+                jumpCounter = charConfig.maxJumpFrames; // 踏みつけ時は長押し追加上昇はさせない
+                
                 launchObstacleEffect(obs);
-                playSe(audioAssets.seJump); // 踏みつけバウンドもジャンプSEを適用
+                playSe(audioAssets.seJump); 
             } else {
                 if (player.invincibleTimer === 0) { triggerDamage(); launchObstacleEffect(obs); }
             }
@@ -345,19 +399,26 @@ function update() {
     if (player.x >= goalX) endGame();
 }
 
-function triggerJump() {
+// ② ジャンプ開始処理
+function triggerJumpStart() {
     if (!player.isJumping && !player.isFallingInPit) {
         const charConfig = CHARACTER_CONFIG[selectedCharKey];
-        player.vy = -charConfig.jumpPower; player.isJumping = true;
-        // ② ジャンプ時のSE
+        player.vy = -charConfig.jumpPower; 
+        player.isJumping = true;
+        jumpCounter = 0; 
+        isInputPressing = true;
         playSe(audioAssets.seJump);
     }
+}
+
+// ② ジャンプボタン（画面）から指が離れた時の処理
+function triggerJumpEnd() {
+    isInputPressing = false;
 }
 
 function endGame() {
     ranking.push(score); ranking.sort((a, b) => b - a); ranking = ranking.slice(0, 3);
     currentState = STATES.RESULT;
-    // ② クリア時のBGMへ切り替え
     playBgm(audioAssets.bgmClear);
 }
 
@@ -466,7 +527,6 @@ function drawResultScreen() {
     ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.textAlign = "center";
     
-    // ① クリア時のテロップを「パウフェクト！」に変更
     ctx.fillStyle = "#FFD700"; ctx.strokeStyle = "#DC2626"; ctx.lineWidth = 6;
     ctx.font = "bold 55px sans-serif";
     ctx.strokeText("パウフェクト！", canvas.width / 2, 90);
@@ -478,48 +538,67 @@ function drawResultScreen() {
     ctx.fillStyle = "#E2E8F0"; ctx.font = "bold 20px sans-serif";
     ctx.fillText("きろく ランキング", canvas.width / 2, 220);
     ranking.forEach((rankScore, index) => { ctx.fillText(`${index + 1}い: ${rankScore} こ`, canvas.width / 2, 260 + index * 30); });
+    ranking.sort((a, b) => b - a);
     ctx.font = "18px sans-serif"; ctx.fillStyle = "#94A3B8"; ctx.fillText("画面をタップして 最初にもどる", canvas.width / 2, 370);
 }
 
-// --- 入力イベント処理 ---
-function handleGlobalClick(e) {
-    let clientX = e.clientX; let clientY = e.clientY;
-    if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+// --- 入力イベント処理（② 長押し対応に切り分け） ---
+function handleInputStart(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const clickX = (clientX - rect.left) * (canvas.width / rect.width);
     const clickY = (clientY - rect.top) * (canvas.height / rect.height);
 
     if (currentState === STATES.TITLE) {
         currentState = STATES.CHAR_SELECT;
-        // ② タイトル画面とキャラ選択は同じBGMを流す（初回のユーザー操作を検知して再生開始）
         playBgm(audioAssets.bgmTitle);
-
     } else if (currentState === STATES.CHAR_SELECT) {
         if (clickX >= charButtons.chase.x && clickX <= charButtons.chase.x + charButtons.chase.width &&
             clickY >= charButtons.chase.y && clickY <= charButtons.chase.y + charButtons.chase.height) {
             selectedCharKey = 'chase'; initGame(); currentState = STATES.PLAY;
-            playBgm(audioAssets.bgmPlay); // ② プレイ中BGMへ切り替え
+            playBgm(audioAssets.bgmPlay);
         } else if (clickX >= charButtons.marshall.x && clickX <= charButtons.marshall.x + charButtons.marshall.width &&
                    clickY >= charButtons.marshall.y && clickY <= charButtons.marshall.y + charButtons.marshall.height) {
             selectedCharKey = 'marshall'; initGame(); currentState = STATES.PLAY;
-            playBgm(audioAssets.bgmPlay); // ② プレイ中BGMへ切り替え
+            playBgm(audioAssets.bgmPlay);
         }
     } else if (currentState === STATES.PLAY) {
-        triggerJump();
+        triggerJumpStart(); // ② ジャンプ力を溜め始める
     } else if (currentState === STATES.RESULT) {
         currentState = STATES.TITLE;
-        playBgm(audioAssets.bgmTitle); // ② タイトルBGMへ戻す
+        playBgm(audioAssets.bgmTitle);
     }
 }
 
-window.addEventListener("mousedown", handleGlobalClick);
-window.addEventListener("touchstart", function(e) {
+// マウスイベント
+window.addEventListener("mousedown", (e) => {
+    handleInputStart(e.clientX, e.clientY);
+});
+window.addEventListener("mouseup", () => {
+    triggerJumpEnd(); // ② 指を離した
+});
+
+// タッチイベント（スマホ用）
+window.addEventListener("touchstart", (e) => {
     if (currentState === STATES.PLAY || currentState === STATES.TITLE || currentState === STATES.RESULT) e.preventDefault(); 
-    handleGlobalClick(e);
+    if (e.touches.length > 0) {
+        handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
+    }
 }, { passive: false });
 
+window.addEventListener("touchend", () => {
+    triggerJumpEnd(); // ② 指を離した
+});
+
+// キーボードイベント（PCテスト用）
 window.addEventListener("keydown", (e) => {
-    if (e.code === "Space" && currentState === STATES.PLAY) triggerJump();
+    if (e.code === "Space" && currentState === STATES.PLAY) {
+        triggerJumpStart();
+    }
+});
+window.addEventListener("keyup", (e) => {
+    if (e.code === "Space" && currentState === STATES.PLAY) {
+        triggerJumpEnd();
+    }
 });
 
 function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
