@@ -140,7 +140,7 @@ const CHARACTER_CONFIG = {
         name: "マーシャル", color: "#DC2626",
         baseSpeed: 5.3, jumpPower: 11.6, maxJumpFrames: 15,
         skillTitle: "🔥 ファイヤー・ジャンプ",
-        skillDesc: "しょうがいぶつを ふむと ウルトラ大ジャンプ！",
+        skillDesc: "しょうがいぶつや ジャンプだいをおすと ウルトラ大ジャンプ！",
         images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
     },
     rubble: {
@@ -256,8 +256,10 @@ imgAssets.items.pawStation = new Image();
 imgAssets.items.pawStation.src = "images/paw_station.png";
 imgAssets.items.rockyShield = new Image();
 imgAssets.items.rockyShield.src = "images/rocky_shield.png";
+imgAssets.items.spring = new Image();
+imgAssets.items.spring.src = "images/spring.png";
 
-const obstacleImages = { car: "images/car.png", box: "images/box.png", cone: "images/cone.png", cat: "images/cat.png", puddle: "images/puddle.png" };
+const obstacleImages = { car: "images/car.png", moving_car: "images/car.png", box: "images/box.png", cone: "images/cone.png", cat: "images/cat.png", puddle: "images/puddle.png" };
 Object.keys(obstacleImages).forEach(key => {
     imgAssets.obstacles[key] = new Image();
     imgAssets.obstacles[key].src = obstacleImages[key];
@@ -355,7 +357,8 @@ function initGame() {
     }
 
     obstacles = [];
-    const types = ['car', 'box', 'cone', 'cat', 'puddle', 'pit'];
+    // 新ギミック 'moving_car' と 'spring' をプールに追加
+    const types = ['car', 'moving_car', 'box', 'cone', 'cat', 'puddle', 'pit', 'spring'];
     for (let i = 0; i < 40; i++) {
         let type = types[Math.floor(Math.random() * types.length)];
         let obsWidth = 50; let obsHeight = 50;
@@ -363,14 +366,19 @@ function initGame() {
         let groundY = getGroundY(ox);
         let obsY = groundY;
 
-        if (type === 'car') { obsWidth = 70; obsHeight = 45; obsY = groundY + 15; }
+        if (type === 'car' || type === 'moving_car') { obsWidth = 70; obsHeight = 45; obsY = groundY + 15; }
         else if (type === 'box') { obsWidth = 50; obsHeight = 50; obsY = groundY + 10; }
         else if (type === 'cone') { obsWidth = 40; obsHeight = 45; obsY = groundY + 15; }
         else if (type === 'cat') { obsWidth = 50; obsHeight = 50; obsY = groundY + 10; }
         else if (type === 'puddle') { obsWidth = 70; obsHeight = 15; obsY = groundY + 45; }
         else if (type === 'pit') { obsWidth = 140; obsHeight = 160; obsY = groundY + 60; }
+        else if (type === 'spring') { obsWidth = 50; obsHeight = 40; obsY = groundY + 20; }
 
-        obstacles.push({ x: ox, y: obsY, width: obsWidth, height: obsHeight, type: type, active: true });
+        // moving_car用に追加パラメータ (初期速度、走行フラグ) を用意
+        obstacles.push({ 
+            x: ox, y: obsY, width: obsWidth, height: obsHeight, 
+            type: type, active: true, vx: 0, isRunning: false 
+        });
     }
 
     cookies = [];
@@ -386,7 +394,6 @@ function initGame() {
         let randItem = Math.random();
         let spawnBone = isLifeMode && (randItem < 0.05);
         
-        // 【修正点】プレイヤーがロッキーの時のみ、低確率（3%）でシールドアイテムを生成
         let spawnShield = false;
         if (!spawnBone && selectedCharKey === 'rocky') {
             if (randItem >= 0.05 && randItem < 0.08) {
@@ -420,7 +427,8 @@ function initGame() {
             if (nearObs) {
                 if (nearObs.type === 'puddle') cy = groundY - 95;
                 else if (nearObs.type === 'pit') cy = groundY - 90;
-                else if (nearObs.type === 'car' || nearObs.type === 'box' || nearObs.type === 'cone') {
+                else if (nearObs.type === 'spring') cy = groundY - 120; // ジャンプ台の上空に配置
+                else if (nearObs.type === 'car' || nearObs.type === 'moving_car' || nearObs.type === 'box' || nearObs.type === 'cone') {
                     if (groupHeightType < 0.5) cy = groundY - 155; else cy = groundY - 95;  
                 }
             } else {
@@ -518,6 +526,22 @@ function update() {
     }
 
     player.speedModifier = 1.0; 
+
+    // 障害物の個別挙動アップデート (うごく車)
+    obstacles.forEach(obs => {
+        if (obs.type === 'moving_car' && obs.active) {
+            // プレイヤーが近づいたら走り出す (画面内に入る手前約600マス)
+            if (!obs.isRunning && obs.x - player.x < 600) {
+                obs.isRunning = true;
+                obs.vx = -3.5; // 左に向かって走る速度
+            }
+            if (obs.isRunning) {
+                obs.x += obs.vx;
+                // 地形のアップダウンに合わせてY座標を更新
+                obs.y = getGroundY(obs.x) + 15;
+            }
+        }
+    });
 
     let onPuddle = false;
     obstacles.forEach(obs => {
@@ -627,7 +651,25 @@ function update() {
                           player.y < obs.y + obs.height && player.y + player.height > obs.y;
         if (!isColliding) return;
 
-        if (obs.type === 'car' || obs.type === 'box' || obs.type === 'cone') {
+        // ジャンプ台 (spring) の判定処理
+        if (obs.type === 'spring') {
+            if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 15) {
+                player.y = obs.y - player.height;
+                // 通常は大ジャンプ(16.5), マーシャルならさらにウルトラ大ジャンプ(20.5)
+                if (selectedCharKey === 'marshall') {
+                    player.vy = -20.5;
+                } else {
+                    player.vy = -16.5;
+                }
+                player.isJumping = true;
+                jumpCounter = charConfig.maxJumpFrames;
+                playSe(audioAssets.seJump);
+            }
+            return;
+        }
+
+        // 通常・うごく車、箱、カラーコーンの判定
+        if (obs.type === 'car' || obs.type === 'moving_car' || obs.type === 'box' || obs.type === 'cone') {
             if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
                 
@@ -875,7 +917,23 @@ function drawPlayScreen() {
 
     obstacles.forEach(obs => {
         if (!obs.active || obs.type === 'pit') return;
-        let obsImg = imgAssets.obstacles[obs.type]; if (obsImg && obsImg.complete) ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height);
+        
+        if (obs.type === 'spring') {
+            // ジャンプ台の描画
+            let springImg = imgAssets.items.spring;
+            if (springImg && springImg.complete) {
+                ctx.drawImage(springImg, obs.x, obs.y, obs.width, obs.height);
+            } else {
+                // 画像がない場合の代替描画（赤いブロック）
+                ctx.fillStyle = "#EF4444";
+                ctx.fillRect(obs.x, obs.y + 15, obs.width, obs.height - 15);
+                ctx.fillStyle = "#FFFFFF";
+                ctx.fillRect(obs.x, obs.y + 10, obs.width, 5);
+            }
+        } else {
+            let obsImg = imgAssets.obstacles[obs.type]; 
+            if (obsImg && obsImg.complete) ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height);
+        }
     });
 
     cookies.forEach(cookie => { if (!cookie.collected) { let cookieImg = imgAssets.items.cookie; if (cookieImg && cookieImg.complete) ctx.drawImage(cookieImg, cookie.x, cookie.y, cookie.width, cookie.height); } });
