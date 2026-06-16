@@ -161,7 +161,7 @@ const CHARACTER_CONFIG = {
         name: "ロッキー", color: "#10B981",
         baseSpeed: 5.4, jumpPower: 11.4, maxJumpFrames: 15,
         skillTitle: "🔧 リサイクル・バリア",
-        skillDesc: "バリアで まもられるぞ！ステージでも ひろうことができる！",
+        skillDesc: "バリアで ままもられるぞ！ステージでも ひろうことができる！",
         images: { run1: "images/rocky_run1.png", run2: "images/rocky_run2.png", jump: "images/rocky_jump.png" }
     },
     zuma: {
@@ -192,6 +192,9 @@ let hoverTimer = 0;
 let hasRockyShield = false;
 let rubbleRecoveryCount = 0;
 let isZumaDashing = false;
+
+// ダッシュボード用の管理変数
+let dashPanelTimer = 0;
 
 // --- ボタンの配置定義 ---
 const pauseButton = { x: 730, y: 15, width: 50, height: 50 };
@@ -263,6 +266,27 @@ imgAssets.items.spring.src = "data:image/svg+xml;charset=utf-8," + encodeURIComp
 </svg>
 `);
 
+// 【新要素】ダッシュボードの画像SVG
+imgAssets.items.dashPanel = new Image();
+imgAssets.items.dashPanel.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="60" height="15" viewBox="0 0 60 15">
+    <polygon points="0,15 15,0 45,0 60,15" fill="#3B82F6" />
+    <polygon points="15,12 25,3 25,12" fill="#FDE047" />
+    <polygon points="30,12 40,3 40,12" fill="#FDE047" />
+</svg>
+`);
+
+// 【新要素】鳥の画像SVG（画像がない場合も動くようSVGで代用）
+imgAssets.obstacles.bird = new Image();
+imgAssets.obstacles.bird.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" viewBox="0 0 40 30">
+    <path d="M10,15 Q20,0 30,15 Q20,20 10,15 Z" fill="#475569" />
+    <path d="M10,15 Q0,5 5,0 Q10,5 12,12" fill="#64748B" />
+    <path d="M30,15 Q40,5 35,0 Q30,5 28,12" fill="#64748B" />
+    <polygon points="22,12 28,15 22,18" fill="#F59E0B" />
+</svg>
+`);
+
 const obstacleImages = { car: "images/car.png", moving_car: "images/car.png", box: "images/box.png", cone: "images/cone.png", cat: "images/cat.png", puddle: "images/puddle.png" };
 Object.keys(obstacleImages).forEach(key => {
     imgAssets.obstacles[key] = new Image();
@@ -297,6 +321,9 @@ let cookies = [];
 let obstacles = [];
 let bones = []; 
 let shieldItems = []; 
+let dashPanels = []; // 【新要素】ダッシュボード用配列
+let textPopups = []; // 【新要素】文字ポップアップ用配列
+let confettiParticles = []; // 【新要素】ゴール紙吹雪用配列
 let goalX = 15000; 
 let cameraX = 0;
 
@@ -308,6 +335,30 @@ function getGroundY(x) {
     let p2 = slopePoints[index + 1];
     let ratio = (x % SLOPE_INTERVAL) / SLOPE_INTERVAL;
     return p1 + (p2 - p1) * ratio;
+}
+
+// 【新要素】文字ポップアップを追加する関数
+function addTextPopup(x, y, text, color = "#FFF") {
+    textPopups.push({
+        x: x, y: y, text: text, color: color, alpha: 1.0, timer: 45
+    });
+}
+
+// 【新要素】紙吹雪を生成する関数
+function createConfetti() {
+    const colors = ["#FF2A6D", "#05D9E8", "#01012B", "#F5A623", "#7ED321", "#B8E986", "#F8E71C"];
+    for (let i = 0; i < 150; i++) {
+        confettiParticles.push({
+            x: Math.random() * 800,
+            y: Math.random() * -400,
+            size: Math.random() * 8 + 5,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            vx: (Math.random() - 0.5) * 4,
+            vy: Math.random() * 3 + 2,
+            rotation: Math.random() * Math.PI,
+            rotSpeed: (Math.random() - 0.5) * 0.1
+        });
+    }
 }
 
 function initGame() {
@@ -322,6 +373,9 @@ function initGame() {
     player.isFallingInPit = false;
     droppedCookies = [];
     fallingObstacles = [];
+    textPopups = [];
+    confettiParticles = [];
+    dashPanelTimer = 0;
     jumpCounter = 0;
 
     isHovering = false;
@@ -361,12 +415,12 @@ function initGame() {
     }
 
     obstacles = [];
-    const types = ['car', 'moving_car', 'box', 'cone', 'cat', 'puddle', 'pit', 'spring'];
-    for (let i = 0; i < 40; i++) {
+    // 【新要素】障害物の種類に 'bird' を追加
+    const types = ['car', 'moving_car', 'box', 'cone', 'cat', 'puddle', 'pit', 'spring', 'bird'];
+    for (let i = 0; i < 42; i++) {
         let type = types[Math.floor(Math.random() * types.length)];
-        let ox = 600 + i * 360 + Math.random() * 60;
+        let ox = 600 + i * 350 + Math.random() * 60;
 
-        // 【修正箇所①】動く車（moving_car）の生成位置が前半（全距離の半分未満）だった場合は通常の車に変更
         if (type === 'moving_car' && ox < goalX / 2) {
             type = 'car';
         }
@@ -382,11 +436,27 @@ function initGame() {
         else if (type === 'puddle') { obsWidth = 70; obsHeight = 15; obsY = groundY + 45; }
         else if (type === 'pit') { obsWidth = 140; obsHeight = 160; obsY = groundY + 60; }
         else if (type === 'spring') { obsWidth = 50; obsHeight = 40; obsY = groundY + 20; }
+        else if (type === 'bird') { 
+            // 【新要素】鳥は空中に配置
+            obsWidth = 45; obsHeight = 35; obsY = groundY - 80 - Math.random() * 40; 
+        }
 
         obstacles.push({ 
             x: ox, y: obsY, width: obsWidth, height: obsHeight, 
             type: type, active: true, vx: 0, isRunning: false 
         });
+    }
+
+    // 【新要素】ダッシュボードの配置
+    dashPanels = [];
+    for (let i = 1; i < 20; i++) {
+        let px = i * 750 + Math.random() * 100;
+        // 穴や障害物のすぐ近くを避ける簡易チェック
+        let nearObs = obstacles.find(obs => Math.abs(obs.x - px) < 100);
+        if (!nearObs) {
+            let gy = getGroundY(px);
+            dashPanels.push({ x: px, y: gy + 45, width: 60, height: 15 });
+        }
     }
 
     cookies = [];
@@ -436,7 +506,7 @@ function initGame() {
                 if (nearObs.type === 'puddle') cy = groundY - 95;
                 else if (nearObs.type === 'pit') cy = groundY - 90;
                 else if (nearObs.type === 'spring') cy = groundY - 120; 
-                else if (nearObs.type === 'car' || nearObs.type === 'moving_car' || nearObs.type === 'box' || nearObs.type === 'cone') {
+                else if (nearObs.type === 'car' || nearObs.type === 'moving_car' || nearObs.type === 'box' || nearObs.type === 'cone' || nearObs.type === 'bird') {
                     if (groupHeightType < 0.5) cy = groundY - 155; else cy = groundY - 95;  
                 }
             } else {
@@ -456,10 +526,12 @@ function triggerDamage() {
         hasRockyShield = false;
         player.invincibleTimer = 60;
         playSe(audioAssets.seHeal);
+        addTextPopup(player.x + 30, player.y - 10, "バリアをうしなった！", "#EF4444");
         return;
     }
 
     playSe(audioAssets.seDamage);
+    addTextPopup(player.x + 30, player.y - 10, "イタッ！", "#EF4444");
     
     if (isLifeMode) {
         lives--;
@@ -485,10 +557,12 @@ function triggerPitFall() {
         player.isJumping = true;
         jumpCounter = 0;
         playSe(audioAssets.seJump);
+        addTextPopup(player.x + 30, player.y - 10, "ド根性ふっかつ！", "#EAB308");
         return;
     }
 
     playSe(audioAssets.sePit);
+    addTextPopup(player.x + 30, player.y - 10, "あなにおちた！", "#EF4444");
 
     if (isLifeMode) {
         lives--;
@@ -510,10 +584,24 @@ function update() {
     if (currentState === STATES.PAUSE || currentState === STATES.GAMEOVER) return;
 
     gameFrame++;
+
+    // 【新要素】結果画面での紙吹雪アニメーション更新
+    if (currentState === STATES.RESULT) {
+        confettiParticles.forEach(p => {
+            p.x += p.vx; p.y += p.vy; p.rotation += p.rotSpeed;
+            if (p.y > 400) { p.y = -20; p.x = Math.random() * 800; }
+        });
+        return;
+    }
+
     if (currentState !== STATES.PLAY) return;
 
     const charConfig = CHARACTER_CONFIG[selectedCharKey];
     if (player.invincibleTimer > 0) player.invincibleTimer--;
+
+    // 【新要素】文字ポップアップの更新
+    textPopups.forEach(p => { p.y -= 0.8; p.timer--; p.alpha = p.timer / 45; });
+    textPopups = textPopups.filter(p => p.timer > 0);
 
     droppedCookies.forEach(dc => { dc.vy += dc.gravity; dc.x += dc.vx; dc.y += dc.vy; dc.rotation += dc.rotSpeed; });
     droppedCookies = droppedCookies.filter(dc => dc.y < 450);
@@ -535,7 +623,14 @@ function update() {
 
     player.speedModifier = 1.0; 
 
+    // 【新要素】ダッシュボードタイマーの更新
+    if (dashPanelTimer > 0) {
+        dashPanelTimer--;
+        player.speedModifier = 1.8; // 通常より大幅にスピードアップ！
+    }
+
     obstacles.forEach(obs => {
+        // 【動く車】
         if (obs.type === 'moving_car' && obs.active) {
             if (!obs.isRunning && obs.x - player.x < 600) {
                 obs.isRunning = true;
@@ -544,6 +639,18 @@ function update() {
             if (obs.isRunning) {
                 obs.x += obs.vx;
                 obs.y = getGroundY(obs.x) + 15;
+            }
+        }
+        // 【新要素：上空の鳥の移動】
+        if (obs.type === 'bird' && obs.active) {
+            if (!obs.isRunning && obs.x - player.x < 700) {
+                obs.isRunning = true;
+                obs.vx = -4.5; // 左にむかって飛んでくる
+            }
+            if (obs.isRunning) {
+                obs.x += obs.vx;
+                // 羽ばたき表現のために上下に少し揺らす
+                obs.y += Math.sin(gameFrame * 0.15) * 1;
             }
         }
     });
@@ -562,11 +669,12 @@ function update() {
         if (selectedCharKey === 'zuma') {
             isZumaDashing = true; 
         } else {
-            player.speedModifier = 0.5; 
+            // ダッシュ中は水たまりの減速を無効化
+            if (dashPanelTimer === 0) player.speedModifier = 0.5; 
         }
     }
 
-    if (selectedCharKey === 'zuma' && isZumaDashing) {
+    if (selectedCharKey === 'zuma' && isZumaDashing && dashPanelTimer === 0) {
         player.speedModifier = 1.5;
     }
 
@@ -618,11 +726,24 @@ function update() {
 
     cameraX = player.x - 100;
 
+    // 【新要素】ダッシュボードとの衝突判定
+    dashPanels.forEach(panel => {
+        if (player.x + player.width > panel.x && player.x < panel.x + panel.width &&
+            player.y + player.height >= panel.y - 10 && player.y + player.height <= panel.y + panel.height + 5) {
+            if (dashPanelTimer === 0) {
+                dashPanelTimer = 60; // 1秒間超高速ダッシュ
+                playSe(audioAssets.seHeal);
+                addTextPopup(player.x + 20, player.y - 10, "⚡超パウダッシュ！", "#3B82F6");
+            }
+        }
+    });
+
     cookies.forEach(cookie => {
         if (!cookie.collected &&
             player.x < cookie.x + cookie.width && player.x + player.width > cookie.x &&
             player.y < cookie.y + cookie.height && player.y + player.height > cookie.y) {
             cookie.collected = true; score++; playSe(audioAssets.seCookie);
+            addTextPopup(cookie.x, cookie.y, "+1", "#FEF08A"); // 【新要素】ポップアップ演出
         }
     });
 
@@ -631,6 +752,7 @@ function update() {
             player.x < bone.x + bone.width && player.x + player.width > bone.x &&
             player.y < bone.y + bone.height && player.y + player.height > bone.y) {
             bone.collected = true; playSe(audioAssets.seHeal); if (lives < 5) lives++; 
+            addTextPopup(bone.x, bone.y, "❤️ライフ回復", "#EF4444"); // 【新要素】ポップアップ演出
         }
     });
 
@@ -643,8 +765,10 @@ function update() {
             
             if (selectedCharKey === 'rocky') {
                 hasRockyShield = true; 
+                addTextPopup(shield.x, shield.y, "🛡️バリアゲット", "#10B981"); // 【新要素】
             } else {
                 score += 3; 
+                addTextPopup(shield.x, shield.y, "+3", "#10B981"); // 【新要素】
             }
         }
     });
@@ -667,19 +791,19 @@ function update() {
                 player.isJumping = true;
                 jumpCounter = charConfig.maxJumpFrames;
                 playSe(audioAssets.seJump);
+                addTextPopup(player.x + 20, player.y - 10, "ジャンプ台！", "#EF4444");
             }
             return;
         }
 
-        if (obs.type === 'car' || obs.type === 'moving_car' || obs.type === 'box' || obs.type === 'cone') {
-            if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
+        // 鳥や車などの通常障害物
+        if (obs.type === 'car' || obs.type === 'moving_car' || obs.type === 'box' || obs.type === 'cone' || obs.type === 'bird') {
+            if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20 && obs.type !== 'bird') {
+                // 鳥以外の地上障害物は上から踏みつけ可能
                 player.y = obs.y - player.height;
                 
-                if (selectedCharKey === 'marshall') {
-                    player.vy = -17.5; 
-                } else {
-                    player.vy = -14.5; 
-                }
+                if (selectedCharKey === 'marshall') { player.vy = -17.5; } 
+                else { player.vy = -14.5; }
                 
                 player.isJumping = true;
                 jumpCounter = charConfig.maxJumpFrames; 
@@ -737,6 +861,7 @@ function endGame() {
     playSe(audioAssets.seClear);
     ranking.push(score); ranking.sort((a, b) => b - a); ranking = ranking.slice(0, 3);
     localStorage.setItem("paw_game_ranking", JSON.stringify(ranking));
+    createConfetti(); // 【新要素】紙吹雪データを生成
     currentState = STATES.RESULT; playBgm(audioAssets.bgmClear);
 }
 
@@ -808,12 +933,10 @@ function drawSelectButton(key, rect, config) {
     let img = imgAssets.chars[key][currentImgKey];
     if (img && img.complete) ctx.drawImage(img, rect.x + 8, rect.y + 20, 70, 70);
     
-    // 【修正箇所②】ボタン内テキストのフォントサイズ調整とはみ出し防止
     ctx.fillStyle = "#1E293B"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     ctx.fillText(config.name, rect.x + 84, rect.y + rect.height / 2);
 }
 
-// 文字列を一定幅で折り返す補助関数
 function wrapText(context, text, x, y, maxWidth, lineHeight) {
     let words = text.split("");
     let line = "";
@@ -875,7 +998,6 @@ function drawCharPopupScreen() {
     ctx.font = "bold 18px sans-serif";
     ctx.fillText(config.skillTitle, popupRect.x + 180, popupRect.y + 120);
 
-    // 【修正箇所②】詳細説明が長くてもポップアップから絶対にはみ出さないよう、自動折り返し描画を適用
     ctx.fillStyle = "#475569";
     ctx.font = "bold 15px sans-serif";
     wrapText(ctx, config.skillDesc, popupRect.x + 180, popupRect.y + 155, 290, 22);
@@ -943,6 +1065,12 @@ function drawPlayScreen() {
 
     obstacles.forEach(obs => { if (obs.type === 'pit' && obs.active) { ctx.fillStyle = "#78350F"; ctx.fillRect(obs.x - 3, getGroundY(obs.x) + 60, 4, 150); ctx.fillRect(obs.x + obs.width - 1, getGroundY(obs.x + obs.width) + 60, 4, 150); } });
 
+    // 【新要素】ダッシュボードの描画
+    dashPanels.forEach(panel => {
+        let dpImg = imgAssets.items.dashPanel;
+        if (dpImg && dpImg.complete) ctx.drawImage(dpImg, panel.x, panel.y, panel.width, panel.height);
+    });
+
     obstacles.forEach(obs => {
         if (!obs.active || obs.type === 'pit') return;
         
@@ -997,8 +1125,8 @@ function drawPlayScreen() {
             }
         }
 
-        if (selectedCharKey === 'zuma' && isZumaDashing) {
-            ctx.fillStyle = "rgba(30, 144, 255, 0.5)";
+        if ((selectedCharKey === 'zuma' && isZumaDashing) || dashPanelTimer > 0) {
+            ctx.fillStyle = dashPanelTimer > 0 ? "rgba(254, 224, 71, 0.6)" : "rgba(30, 144, 255, 0.5)";
             for (let i = 0; i < 3; i++) {
                 let px = player.x - 10 - (gameFrame % 20) + (i * 10);
                 let py = player.y + player.height - 10 + (Math.sin(gameFrame + i) * 4);
@@ -1006,6 +1134,20 @@ function drawPlayScreen() {
             }
         }
     }
+
+    // 【新要素】文字ポップアップの描画
+    textPopups.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.font = "bold 16px sans-serif";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "rgba(0,0,0,1)";
+        ctx.shadowBlur = 4;
+        ctx.fillText(p.text, p.x, p.y);
+        ctx.restore();
+    });
+
     ctx.restore();
 
     let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(`× ${score}`, 60, 40); }
@@ -1030,6 +1172,17 @@ function drawPlayScreen() {
 
 function drawResultScreen() {
     ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, 800, 400);
+
+    // 【新要素】ゴール時の紙吹雪描画
+    confettiParticles.forEach(p => {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
+    });
+
     ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#FFD700"; ctx.strokeStyle = "#DC2626"; ctx.lineWidth = 6; ctx.font = "bold 55px sans-serif"; ctx.strokeText("パウフェクト！", 400, 90); ctx.fillText("パウフェクト！", 400, 90);
     ctx.font = "bold 28px sans-serif"; ctx.fillStyle = "#FFFFFF"; ctx.fillText(`あつめたクッキー: ${score} こ`, 400, 160);
