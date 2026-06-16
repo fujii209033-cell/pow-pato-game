@@ -156,7 +156,7 @@ const charButtons = {
     rubble: { x: 540, y: 140, width: 220, height: 180 }
 };
 
-// 🛠️ モード選択ボタンの当たり判定位置を再調整（画面内 800px に綺麗に収まる設計）
+// モード選択ボタンの当たり判定位置
 const modeButtons = {
     noLife: { x: 65, y: 160, width: 310, height: 140 },
     withLife: { x: 425, y: 160, width: 310, height: 140 }
@@ -651,38 +651,45 @@ function drawSelectButton(key, rect, config) {
     ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
-// 🛠️ 難易度選択画面の描画（計算式を一新し、文字がボタンのセンターに絶対配置されるよう修正）
+// 🛠️ 難易度選択画面の描画（各テキスト描画の直前に明示的に center 配置を強制するよう修正）
 function drawModeSelectScreen() {
     ctx.fillStyle = "#FFFAF0"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("どちらの モードに する？", canvas.width / 2, 90);
-
-    // 1行に表示できる幅を持たせるため、フォントサイズを18pxに安全調整
+    
     ctx.textAlign = "center";
+    ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; 
+    ctx.fillText("どちらの モードに する？", canvas.width / 2, 90);
 
     // --- 💚 ライフなし（あんしん練習モード） ---
     let b1 = modeButtons.noLife;
     ctx.fillStyle = "#10B981"; ctx.beginPath(); ctx.roundRect(b1.x, b1.y, b1.width, b1.height, 20); ctx.fill();
     
-    // ボタンの完全な中心点のX座標を計算
-    let b1CenterX = b1.x + (b1.width / 2);
+    // 描画設定の完全クリーン化
+    ctx.save();
+    ctx.textAlign = "center"; 
     ctx.fillStyle = "#FFFFFF"; 
+    let b1CenterX = b1.x + (b1.width / 2);
+    
     ctx.font = "bold 18px sans-serif"; 
     ctx.fillText("💚 ライフなし", b1CenterX, b1.y + 55);
     ctx.font = "14px sans-serif"; 
     ctx.fillText("(ぶつかっても ずっと走れるよ)", b1CenterX, b1.y + 95);
+    ctx.restore();
 
     // --- ❤️ ライフあり（ドキドキ挑戦モード） ---
     let b2 = modeButtons.withLife;
     ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(b2.x, b2.y, b2.width, b2.height, 20); ctx.fill();
     
-    // ボタンの完全な中心点のX座標を計算
-    let b2CenterX = b2.x + (b2.width / 2);
+    // 描画設定の完全クリーン化（はみ出し・右ズレの徹底ガード）
+    ctx.save();
+    ctx.textAlign = "center"; 
     ctx.fillStyle = "#FFFFFF"; 
+    let b2CenterX = b2.x + (b2.width / 2);
+    
     ctx.font = "bold 18px sans-serif"; 
     ctx.fillText("❤️ ライフあり (5つ)", b2CenterX, b2.y + 55);
     ctx.font = "14px sans-serif"; 
     ctx.fillText("(5回ぶつかると ゲームオーバー)", b2CenterX, b2.y + 95);
+    ctx.restore();
 }
 
 function drawPlayScreen() {
