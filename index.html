@@ -38,11 +38,11 @@ const ctx = canvas.getContext("2d");
 const STATES = {
     TITLE: 'TITLE',
     CHAR_SELECT: 'CHAR_SELECT',
-    MODE_SELECT: 'MODE_SELECT', // ② 難易度選択画面を追加
+    MODE_SELECT: 'MODE_SELECT', 
     PLAY: 'PLAY',
     PAUSE: 'PAUSE',
     RESULT: 'RESULT',
-    GAMEOVER: 'GAMEOVER',       // ② ゲームオーバー状態を追加
+    GAMEOVER: 'GAMEOVER',       
     RANKING_VIEW: 'RANKING_VIEW'
 };
 let currentState = STATES.TITLE;
@@ -52,13 +52,13 @@ const audioAssets = {
     bgmTitle: new Audio("sounds/bgm_title.mp3"),
     bgmPlay: new Audio("sounds/bgm_play.mp3"),
     bgmClear: new Audio("sounds/bgm_clear.mp3"),
-    bgmGameover: new Audio("sounds/bgm_gameover.mp3"), // ② ゲームオーバーBGMを追加
+    bgmGameover: new Audio("sounds/bgm_gameover.mp3"), 
     seJump: new Audio("sounds/se_jump.mp3"),
     seCookie: new Audio("sounds/se_cookie.mp3"),
     seDamage: new Audio("sounds/se_damage.mp3"),
     sePit: new Audio("sounds/se_pit.mp3"),
     seClear: new Audio("sounds/se_clear.mp3"),
-    seHeal: new Audio("sounds/se_heal.mp3")            // ② 回復SEを追加
+    seHeal: new Audio("sounds/se_heal.mp3")            
 };
 
 // 音量の一律統一設定
@@ -70,7 +70,7 @@ Object.keys(audioAssets).forEach(key => {
 audioAssets.bgmTitle.loop = true;
 audioAssets.bgmPlay.loop = true;
 audioAssets.bgmClear.loop = true;
-audioAssets.bgmGameover.loop = false; // ゲームオーバーは1回流す形にします
+audioAssets.bgmGameover.loop = false; 
 
 let currentActiveBgm = null; 
 let isAudioInitialized = false; 
@@ -139,7 +139,7 @@ const CHARACTER_CONFIG = {
 };
 
 let selectedCharKey = 'chase'; 
-let isLifeMode = true; // ② 難易度フラグ（true = ライフあり, false = ライフなし）
+let isLifeMode = true; 
 
 // --- 入力長押し判定用変数 ---
 let isInputPressing = false;
@@ -156,10 +156,10 @@ const charButtons = {
     rubble: { x: 540, y: 140, width: 220, height: 180 }
 };
 
-// ② 難易度選択画面のボタン位置
+// 🛠️ 難易度選択画面のボタン位置（横幅を少し広げ、左右の間隔を調整しました）
 const modeButtons = {
-    noLife: { x: 80, y: 160, width: 280, height: 140 },
-    withLife: { x: 440, y: 160, width: 280, height: 140 }
+    noLife: { x: 60, y: 160, width: 310, height: 140 },
+    withLife: { x: 430, y: 160, width: 310, height: 140 }
 };
 
 // --- 画像アセット ---
@@ -173,7 +173,7 @@ Object.keys(CHARACTER_CONFIG).forEach(charKey => {
 });
 imgAssets.items.cookie = new Image();
 imgAssets.items.cookie.src = "images/cookie.png";
-imgAssets.items.bone = new Image();            // ② 回復アイテム（ほねクッキー）追加
+imgAssets.items.bone = new Image();            
 imgAssets.items.bone.src = "images/bone.png";
 imgAssets.items.pawStation = new Image();
 imgAssets.items.pawStation.src = "images/paw_station.png";
@@ -187,7 +187,7 @@ Object.keys(obstacleImages).forEach(key => {
 // --- ゲーム変数 ---
 let gameFrame = 0; 
 let score = 0;
-let lives = 5; // ① 最大ライフ数を5に設定
+let lives = 5; 
 
 let ranking = [15, 10, 5];
 if (localStorage.getItem("paw_game_ranking")) {
@@ -215,7 +215,7 @@ let fallingObstacles = [];
 let bgBuildings = [];
 let cookies = [];
 let obstacles = [];
-let bones = []; // ② ほねクッキー配列を追加
+let bones = []; 
 let goalX = 15000; 
 let cameraX = 0;
 
@@ -231,7 +231,7 @@ function getGroundY(x) {
 
 function initGame() {
     score = 0;
-    lives = 5; // ① ゲーム開始時にライフを5にする
+    lives = 5; 
     cameraX = 0;
     player.x = 100;
     player.vy = 0;
@@ -297,7 +297,7 @@ function initGame() {
 
     // クッキーの出現
     cookies = [];
-    bones = []; // ② ほねクッキー初期化
+    bones = []; 
     let currentX = 400;
     while (currentX < goalX - 500) {
         currentX += 80 + Math.random() * 140; 
@@ -305,7 +305,6 @@ function initGame() {
         let numGroup = Math.floor(Math.random() * 2) + 3; 
         let groupHeightType = Math.random();
 
-        // ② ライフありモードの時だけ、たまに「ほねクッキー」を出現させる(5%の確率)
         let spawnBone = isLifeMode && (Math.random() < 0.05);
 
         if (spawnBone) {
@@ -350,7 +349,6 @@ function triggerDamage() {
     if (player.invincibleTimer > 0) return; 
     playSe(audioAssets.seDamage);
     
-    // ② ライフありモードならライフを1減らす
     if (isLifeMode) {
         lives--;
         if (lives <= 0) {
@@ -394,7 +392,6 @@ function triggerPitFall() {
     player.invincibleTimer = 120;
 }
 
-// ② ゲームオーバー処理の追加
 function triggerGameOver() {
     currentState = STATES.GAMEOVER;
     playBgm(audioAssets.bgmGameover);
@@ -464,7 +461,7 @@ function update() {
             player.isFallingInPit = true; player.vy = 4; 
             player.pitResetX = currentPit.x + currentPit.width + 20; 
             triggerPitFall();
-            if (currentState === STATES.GAMEOVER) return; // 死亡したら即終了
+            if (currentState === STATES.GAMEOVER) return; 
         }
     } else {
         let currentGroundY = getGroundY(player.x);
@@ -486,14 +483,14 @@ function update() {
         }
     });
 
-    // ② ほねクッキー（回復）獲得
+    // ほねクッキー（回復）獲得
     bones.forEach(bone => {
         if (!bone.collected &&
             player.x < bone.x + bone.width && player.x + player.width > bone.x &&
             player.y < bone.y + bone.height && player.y + player.height > bone.y) {
             bone.collected = true;
             playSe(audioAssets.seHeal);
-            if (lives < 5) lives++; // 最大5まで回復
+            if (lives < 5) lives++; 
         }
     });
 
@@ -558,10 +555,10 @@ function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (currentState === STATES.TITLE) drawTitleScreen();
     else if (currentState === STATES.CHAR_SELECT) drawCharSelectScreen();
-    else if (currentState === STATES.MODE_SELECT) drawModeSelectScreen(); // ② 難易度画面
+    else if (currentState === STATES.MODE_SELECT) drawModeSelectScreen(); 
     else if (currentState === STATES.PLAY || currentState === STATES.PAUSE) drawPlayScreen(); 
     else if (currentState === STATES.RESULT) drawResultScreen();
-    else if (currentState === STATES.GAMEOVER) drawGameOverScreen();       // ② ゲームオーバー画面
+    else if (currentState === STATES.GAMEOVER) drawGameOverScreen();       
     else if (currentState === STATES.RANKING_VIEW) drawRankingViewScreen();
 }
 
@@ -654,7 +651,7 @@ function drawSelectButton(key, rect, config) {
     ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
-// ② 【追加】難易度（モード）選択画面の描画
+// 🛠️ 難易度（モード）選択画面の描画（文字サイズとレイアウトをスッキリ修正）
 function drawModeSelectScreen() {
     ctx.fillStyle = "#FFFAF0"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.textAlign = "center";
@@ -662,15 +659,15 @@ function drawModeSelectScreen() {
 
     // ライフなし（あんしん練習モード）
     ctx.fillStyle = "#10B981"; ctx.beginPath(); ctx.roundRect(modeButtons.noLife.x, modeButtons.noLife.y, modeButtons.noLife.width, modeButtons.noLife.height, 20); ctx.fill();
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; // 24px -> 20px
     ctx.fillText("💚 ライフなし", modeButtons.noLife.x + modeButtons.noLife.width / 2, modeButtons.noLife.y + 60);
-    ctx.font = "16px sans-serif"; ctx.fillText("(ぶつかっても ずっと走れるよ)", modeButtons.noLife.x + modeButtons.noLife.width / 2, modeButtons.noLife.y + 100);
+    ctx.font = "15px sans-serif"; ctx.fillText("(ぶつかっても ずっと走れるよ)", modeButtons.noLife.x + modeButtons.noLife.width / 2, modeButtons.noLife.y + 100);
 
     // ライフあり（ドキドキ挑戦モード）
     ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(modeButtons.withLife.x, modeButtons.withLife.y, modeButtons.withLife.width, modeButtons.withLife.height, 20); ctx.fill();
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; // 24px -> 20px
     ctx.fillText("❤️ ライフあり (5つ)", modeButtons.withLife.x + modeButtons.withLife.width / 2, modeButtons.withLife.y + 60);
-    ctx.font = "16px sans-serif"; ctx.fillText("(5回ぶつかると ゲームオーバー)", modeButtons.withLife.x + modeButtons.withLife.width / 2, modeButtons.withLife.y + 100);
+    ctx.font = "15px sans-serif"; ctx.fillText("(5回ぶつかると ゲームオーバー)", modeButtons.withLife.x + modeButtons.withLife.width / 2, modeButtons.withLife.y + 100);
 }
 
 function drawPlayScreen() {
@@ -715,7 +712,7 @@ function drawPlayScreen() {
     // クッキー
     cookies.forEach(cookie => { if (!cookie.collected) { let cookieImg = imgAssets.items.cookie; if (cookieImg && cookieImg.complete) ctx.drawImage(cookieImg, cookie.x, cookie.y, cookie.width, cookie.height); } });
     
-    // ② ほねクッキー
+    // ほねクッキー
     bones.forEach(bone => { if (!bone.collected) { let boneImg = imgAssets.items.bone; if (boneImg && boneImg.complete) ctx.drawImage(boneImg, bone.x, bone.y, bone.width, bone.height); } });
 
     droppedCookies.forEach(dc => { ctx.save(); ctx.translate(dc.x, dc.y); ctx.rotate(dc.rotation); let cookieImg = imgAssets.items.cookie; if (cookieImg && cookieImg.complete) ctx.drawImage(cookieImg, -15, -15, 30, 30); ctx.restore(); });
@@ -737,7 +734,7 @@ function drawPlayScreen() {
     // UIスコア
     let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.fillText(`× ${score}`, 60, 40); }
 
-    // ①② ライフありモードのみ左上にハートを描画
+    // ライフありモードのみ左上にハートを描画
     if (isLifeMode) {
         let heartX = 170;
         for (let i = 0; i < 5; i++) {
@@ -745,7 +742,7 @@ function drawPlayScreen() {
             if (i < lives) {
                 ctx.fillText("❤️", heartX + i * 32, 40);
             } else {
-                ctx.fillText("🖤", heartX + i * 32, 40); // 減ったライフは黒いハート
+                ctx.fillText("🖤", heartX + i * 32, 40); 
             }
         }
     } else {
@@ -798,7 +795,6 @@ function drawResultScreen() {
     ctx.font = "18px sans-serif"; ctx.fillStyle = "#94A3B8"; ctx.fillText("画面をタップして 最初にもどる", canvas.width / 2, 370);
 }
 
-// ③ 【追加】ゲームオーバー（パウフェクトならず、、、！）画面の描画
 function drawGameOverScreen() {
     ctx.fillStyle = "rgba(15, 23, 42, 0.85)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.textAlign = "center";
@@ -876,16 +872,15 @@ function handleInputStart(clientX, clientY) {
     } else if (currentState === STATES.CHAR_SELECT) {
         if (clickX >= charButtons.chase.x && clickX <= charButtons.chase.x + charButtons.chase.width &&
             clickY >= charButtons.chase.y && clickY <= charButtons.chase.y + charButtons.chase.height) {
-            selectedCharKey = 'chase'; currentState = STATES.MODE_SELECT; // ② 難易度選択へ
+            selectedCharKey = 'chase'; currentState = STATES.MODE_SELECT; 
         } else if (clickX >= charButtons.marshall.x && clickX <= charButtons.marshall.x + charButtons.marshall.width &&
                    clickY >= charButtons.marshall.y && clickY <= charButtons.marshall.y + charButtons.marshall.height) {
-            selectedCharKey = 'marshall'; currentState = STATES.MODE_SELECT; // ② 難易度選択へ
+            selectedCharKey = 'marshall'; currentState = STATES.MODE_SELECT; 
         } else if (clickX >= charButtons.rubble.x && clickX <= charButtons.rubble.x + charButtons.rubble.width &&
                    clickY >= charButtons.rubble.y && clickY <= charButtons.rubble.y + charButtons.rubble.height) {
-            selectedCharKey = 'rubble'; currentState = STATES.MODE_SELECT; // ② 難易度選択へ
+            selectedCharKey = 'rubble'; currentState = STATES.MODE_SELECT; 
         }
     } else if (currentState === STATES.MODE_SELECT) {
-        // ② 難易度決定処理
         if (clickX >= modeButtons.noLife.x && clickX <= modeButtons.noLife.x + modeButtons.noLife.width &&
             clickY >= modeButtons.noLife.y && clickY <= modeButtons.noLife.y + modeButtons.noLife.height) {
             isLifeMode = false; initGame(); currentState = STATES.PLAY;
@@ -907,7 +902,6 @@ function handleInputStart(clientX, clientY) {
         currentState = STATES.PLAY;
         if (currentActiveBgm) currentActiveBgm.play().catch(e => {});
     } else if (currentState === STATES.RESULT || currentState === STATES.GAMEOVER) {
-        // ② 結果画面、またはゲームオーバー画面タップでタイトルへ戻る
         currentState = STATES.TITLE;
         playBgm(audioAssets.bgmTitle);
     }
