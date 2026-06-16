@@ -36,7 +36,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 高解像度ディスプレイ（スマホ実機）での文字ズレ・ボヤけを完全に防ぐ特殊処理
+// 高解像度ディスプレイ（スマホ実機）での文字ズレ・ボヤけを完全に防げる特殊処理
 function resizeCanvasForRetina() {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -594,7 +594,6 @@ function drawTitleScreen() {
     ctx.arc(400, 150, 65, 0, Math.PI*2); 
     ctx.fill();
 
-    ctx.restore(); // 一度クリア
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
 
@@ -653,18 +652,22 @@ function drawSelectButton(key, rect, config) {
     ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
-// 🛠️ 難易度選択画面（テキスト位置リセット問題を完璧に克服した描画ロジック）
+// 🛠️ 難易度選択画面（不要なrestoreを完全削除し、絶対中央揃えを保証）
 function drawModeSelectScreen() {
     ctx.fillStyle = "#FFFAF0"; 
     ctx.fillRect(0, 0, 800, 400);
     
-    // タイトルの描画（強制的に設定を上書き）
-    ctx.restore(); 
+    // タイトル
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#1E293B"; 
     ctx.font = "bold 32px sans-serif"; 
     ctx.fillText("どちらの モードに する？", 400, 90);
+
+    // 共通の文字スタイル設定
+    ctx.textAlign = "center"; 
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#FFFFFF"; 
 
     // --- 💚 ライフなし（左ボタン） ---
     let b1 = modeButtons.noLife;
@@ -673,13 +676,9 @@ function drawModeSelectScreen() {
     ctx.roundRect(b1.x, b1.y, b1.width, b1.height, 20); 
     ctx.fill();
     
-    // 描画後にスタイルが戻るのを防ぐため、文字を描く直前に都度centerを設定
-    ctx.textAlign = "center"; 
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#FFFFFF"; 
-    
     let b1CenterX = b1.x + (b1.width / 2);
-    ctx.font = "bold 22px sans-serif"; 
+    ctx.fillStyle = "#FFFFFF"; 
+    ctx.font = "bold 21px sans-serif"; 
     ctx.fillText("💚 ライフなし", b1CenterX, b1.y + 50);
     ctx.font = "bold 15px sans-serif"; 
     ctx.fillText("(ぶつかっても ずっと走れるよ)", b1CenterX, b1.y + 95);
@@ -691,13 +690,9 @@ function drawModeSelectScreen() {
     ctx.roundRect(b2.x, b2.y, b2.width, b2.height, 20); 
     ctx.fill();
     
-    // 右ボタンも描画直前にcenterとmiddleを設定して左揃えへのリセットを完全阻止
-    ctx.textAlign = "center"; 
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#FFFFFF"; 
-    
     let b2CenterX = b2.x + (b2.width / 2);
-    ctx.font = "bold 22px sans-serif"; 
+    ctx.fillStyle = "#FFFFFF"; 
+    ctx.font = "bold 18px sans-serif"; // スマホで絶対にはみ出さない安全サイズ
     ctx.fillText("❤️ ライフあり (5つ)", b2CenterX, b2.y + 50);
     ctx.font = "bold 15px sans-serif"; 
     ctx.fillText("(5回ぶつかると ゲームオーバー)", b2CenterX, b2.y + 95);
