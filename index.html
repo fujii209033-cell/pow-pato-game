@@ -21,7 +21,6 @@
         canvas {
             background-color: #87CEEB; /* 空の色 */
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            /* 実機でのサイズズレによる文字の右ズレを防ぐため、アスペクト比を固定 */
             width: 100%;
             max-width: 800px;
             height: auto;
@@ -37,26 +36,21 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 🛠️ 高解像度ディスプレイ（スマホ実機）での文字ズレ・ボヤけを完全に防ぐ特殊処理
+// 高解像度ディスプレイ（スマホ実機）での文字ズレ・ボヤけを完全に防ぐ特殊処理
 function resizeCanvasForRetina() {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     
-    // 論理サイズを800x400に固定したまま、内部描画バッファをデバイスに適合
     canvas.width = 800 * dpr;
     canvas.height = 400 * dpr;
     
-    // スケールを自動調整
     ctx.scale(dpr, dpr);
     
-    // スタイル上のサイズを担保
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
 }
-// 初期化時と画面回転・サイズ変更時に実行
 window.addEventListener('load', resizeCanvasForRetina);
 window.addEventListener('resize', resizeCanvasForRetina);
-// 即時1回実行してバッファを確定
 resizeCanvasForRetina();
 
 // --- ゲームの状態 ---
@@ -103,7 +97,6 @@ function playBgm(targetAudio) {
     audioAssets.bgmTitle.pause(); audioAssets.bgmTitle.currentTime = 0;
     audioAssets.bgmPlay.pause();  audioAssets.bgmPlay.currentTime = 0;
     audioAssets.bgmClear.pause(); audioAssets.bgmClear.currentTime = 0;
-    audioAssets.bgmGameover.pause(); audioAssets.bgover = 0; 
     audioAssets.bgmGameover.pause(); audioAssets.bgmGameover.currentTime = 0;
     
     currentActiveBgm = targetAudio;
@@ -564,7 +557,7 @@ function endGame() {
 
 // --- 描画処理 ---
 function draw() {
-    ctx.clearRect(0, 0, 800, 400); // 内部サイズベースでクリア
+    ctx.clearRect(0, 0, 800, 400); 
     if (currentState === STATES.TITLE) drawTitleScreen();
     else if (currentState === STATES.CHAR_SELECT) drawCharSelectScreen();
     else if (currentState === STATES.MODE_SELECT) drawModeSelectScreen(); 
@@ -601,7 +594,10 @@ function drawTitleScreen() {
     ctx.arc(400, 150, 65, 0, Math.PI*2); 
     ctx.fill();
 
+    ctx.restore(); // 一度クリア
     ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+
     ctx.fillStyle = "#A31D1D"; 
     ctx.font = "bold 56px 'Arial Black', sans-serif";
     ctx.fillText("パウ・パトロール ゲーム", 400 + 4, 154);
@@ -635,6 +631,7 @@ function drawTitleScreen() {
 function drawCharSelectScreen() {
     ctx.fillStyle = "#E0F2FE"; ctx.fillRect(0, 0, 800, 400);
     ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
     ctx.fillText("だれで あそぶ？", 400, 80);
     
     drawSelectButton('chase', charButtons.chase, CHARACTER_CONFIG.chase);
@@ -648,51 +645,65 @@ function drawSelectButton(key, rect, config) {
     let currentImgKey = (Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2';
     let img = imgAssets.chars[key][currentImgKey];
     if (img && img.complete) ctx.drawImage(img, rect.x + rect.width/2 - 45, rect.y + 20, 90, 90);
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
+    
+    ctx.fillStyle = "#1E293B"; 
+    ctx.font = "bold 24px sans-serif"; 
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
     ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
-// 🛠️ 難易度選択画面（スマホ等での右ズレ現象を完全消去した強固な描画ロジック）
+// 🛠️ 難易度選択画面（テキスト位置リセット問題を完璧に克服した描画ロジック）
 function drawModeSelectScreen() {
-    ctx.fillStyle = "#FFFAF0"; ctx.fillRect(0, 0, 800, 400);
+    ctx.fillStyle = "#FFFAF0"; 
+    ctx.fillRect(0, 0, 800, 400);
     
-    // タイトルの描画
-    ctx.save();
+    // タイトルの描画（強制的に設定を上書き）
+    ctx.restore(); 
     ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#1E293B"; 
     ctx.font = "bold 32px sans-serif"; 
     ctx.fillText("どちらの モードに する？", 400, 90);
-    ctx.restore();
 
     // --- 💚 ライフなし（左ボタン） ---
     let b1 = modeButtons.noLife;
-    ctx.fillStyle = "#10B981"; ctx.beginPath(); ctx.roundRect(b1.x, b1.y, b1.width, b1.height, 20); ctx.fill();
+    ctx.fillStyle = "#10B981"; 
+    ctx.beginPath(); 
+    ctx.roundRect(b1.x, b1.y, b1.width, b1.height, 20); 
+    ctx.fill();
     
-    ctx.save();
-    let b1CenterX = b1.x + (b1.width / 2);
-    ctx.textAlign = "center"; // 文字列の中心をb1CenterXに強制固定
+    // 描画後にスタイルが戻るのを防ぐため、文字を描く直前に都度centerを設定
+    ctx.textAlign = "center"; 
+    ctx.textBaseline = "middle";
     ctx.fillStyle = "#FFFFFF"; 
     
-    ctx.font = "bold 18px sans-serif"; 
-    ctx.fillText("💚 ライフなし", b1CenterX, b1.y + 55);
-    ctx.font = "14px sans-serif"; 
+    let b1CenterX = b1.x + (b1.width / 2);
+    ctx.font = "bold 22px sans-serif"; 
+    ctx.fillText("💚 ライフなし", b1CenterX, b1.y + 50);
+    ctx.font = "bold 15px sans-serif"; 
     ctx.fillText("(ぶつかっても ずっと走れるよ)", b1CenterX, b1.y + 95);
-    ctx.restore();
 
     // --- ❤️ ライフあり（右ボタン） ---
     let b2 = modeButtons.withLife;
-    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(b2.x, b2.y, b2.width, b2.height, 20); ctx.fill();
+    ctx.fillStyle = "#EF4444"; 
+    ctx.beginPath(); 
+    ctx.roundRect(b2.x, b2.y, b2.width, b2.height, 20); 
+    ctx.fill();
     
-    ctx.save();
-    let b2CenterX = b2.x + (b2.width / 2);
-    ctx.textAlign = "center"; // 文字列の中心をb2CenterXに強制固定
+    // 右ボタンも描画直前にcenterとmiddleを設定して左揃えへのリセットを完全阻止
+    ctx.textAlign = "center"; 
+    ctx.textBaseline = "middle";
     ctx.fillStyle = "#FFFFFF"; 
     
-    ctx.font = "bold 18px sans-serif"; 
-    ctx.fillText("❤️ ライフあり (5つ)", b2CenterX, b2.y + 55);
-    ctx.font = "14px sans-serif"; 
+    let b2CenterX = b2.x + (b2.width / 2);
+    ctx.font = "bold 22px sans-serif"; 
+    ctx.fillText("❤️ ライフあり (5つ)", b2CenterX, b2.y + 50);
+    ctx.font = "bold 15px sans-serif"; 
     ctx.fillText("(5回ぶつかると ゲームオーバー)", b2CenterX, b2.y + 95);
-    ctx.restore();
+    
+    // 後続処理のためにデフォルトに戻す
+    ctx.textBaseline = "alphabetic";
 }
 
 function drawPlayScreen() {
@@ -746,7 +757,7 @@ function drawPlayScreen() {
     }
     ctx.restore();
 
-    let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.fillText(`× ${score}`, 60, 40); }
+    let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(`× ${score}`, 60, 40); }
 
     if (isLifeMode) {
         let heartX = 170;
@@ -765,13 +776,12 @@ function drawPlayScreen() {
     ctx.roundRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height, 12);
     ctx.fill();
     
-    ctx.save();
-    ctx.fillStyle = "#1E293B";
-    ctx.font = "bold 20px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle"; 
+    ctx.fillStyle = "#1E293B";
+    ctx.font = "bold 20px sans-serif";
     ctx.fillText("⏸️", pauseButton.x + (pauseButton.width / 2), pauseButton.y + (pauseButton.height / 2) + 2);
-    ctx.restore();
+    ctx.textBaseline = "alphabetic";
 
     if (currentState === STATES.PAUSE) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
@@ -785,7 +795,7 @@ function drawPlayScreen() {
 
 function drawResultScreen() {
     ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, 800, 400);
-    ctx.textAlign = "center";
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#FFD700"; ctx.strokeStyle = "#DC2626"; ctx.lineWidth = 6;
     ctx.font = "bold 55px sans-serif";
     ctx.strokeText("パウフェクト！", 400, 90);
@@ -801,7 +811,7 @@ function drawResultScreen() {
 
 function drawGameOverScreen() {
     ctx.fillStyle = "rgba(15, 23, 42, 0.85)"; ctx.fillRect(0, 0, 800, 400);
-    ctx.textAlign = "center";
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#94A3B8"; ctx.strokeStyle = "#475569"; ctx.lineWidth = 5;
     ctx.font = "bold 50px sans-serif";
     ctx.strokeText("パウフェクトならず、、、！", 400, 150);
@@ -814,6 +824,7 @@ function drawGameOverScreen() {
 function drawRankingViewScreen() {
     ctx.fillStyle = "#1E293B"; ctx.fillRect(0, 0, 800, 400);
     ctx.textAlign = "center"; ctx.fillStyle = "#FFD700"; ctx.font = "bold 36px sans-serif";
+    ctx.textBaseline = "alphabetic";
     ctx.fillText("🏆 かこのきろく ベスト3 🏆", 400, 80);
 
     const medalColors = ["#FFD700", "#C0C0C0", "#CD7F32"];
@@ -824,7 +835,9 @@ function drawRankingViewScreen() {
 
     ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(rankingBackButton.x, rankingBackButton.y, rankingBackButton.width, rankingBackButton.height, 15); ctx.fill();
     ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textBaseline = "middle";
+    
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; 
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("もどる", rankingBackButton.x + (rankingBackButton.width / 2), rankingBackButton.y + (rankingBackButton.height / 2));
     ctx.textBaseline = "alphabetic";
 }
@@ -832,7 +845,6 @@ function drawRankingViewScreen() {
 // --- 入力イベント処理 ---
 function handleInputStart(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    // 🛠️ 拡大縮小されてもタップ位置を800x400の仮想座標系に正しく変換
     const clickX = (clientX - rect.left) * (800 / rect.width);
     const clickY = (clientY - rect.top) * (400 / rect.height);
 
@@ -881,18 +893,15 @@ function handleInputStart(clientX, clientY) {
     }
 }
 
-// マウスイベント
 window.addEventListener("mousedown", (e) => { handleInputStart(e.clientX, e.clientY); });
 window.addEventListener("mouseup", () => { triggerJumpEnd(); });
 
-// タッチイベント
 window.addEventListener("touchstart", (e) => {
     if (currentState !== STATES.CHAR_SELECT && currentState !== STATES.MODE_SELECT) e.preventDefault(); 
     if (e.touches.length > 0) handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
 }, { passive: false });
 window.addEventListener("touchend", () => { triggerJumpEnd(); });
 
-// キーボードイベント
 window.addEventListener("keydown", (e) => {
     if (!isAudioInitialized) isAudioInitialized = true;
     if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpStart();
@@ -901,7 +910,6 @@ window.addEventListener("keyup", (e) => {
     if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpEnd();
 });
 
-// 高速ループ
 let lastTime = performance.now();
 let accumulatedTime = 0;
 const deltaTimeTarget = 1000 / 60; 
