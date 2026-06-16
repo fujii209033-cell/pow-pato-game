@@ -290,7 +290,7 @@ let bgBuildings = [];
 let cookies = [];
 let obstacles = [];
 let bones = []; 
-let shieldItems = []; // ステージ上に湧くシールドアイテム用配列
+let shieldItems = []; 
 let goalX = 15000; 
 let cameraX = 0;
 
@@ -375,7 +375,7 @@ function initGame() {
 
     cookies = [];
     bones = []; 
-    shieldItems = []; // 初期化
+    shieldItems = []; 
     let currentX = 400;
     while (currentX < goalX - 500) {
         currentX += 80 + Math.random() * 140; 
@@ -385,7 +385,14 @@ function initGame() {
 
         let randItem = Math.random();
         let spawnBone = isLifeMode && (randItem < 0.05);
-        let spawnShield = !spawnBone && (randItem >= 0.05 && randItem < 0.08); // 骨(5%)より若干低い確率(3%)
+        
+        // 【修正点】プレイヤーがロッキーの時のみ、低確率（3%）でシールドアイテムを生成
+        let spawnShield = false;
+        if (!spawnBone && selectedCharKey === 'rocky') {
+            if (randItem >= 0.05 && randItem < 0.08) {
+                spawnShield = true;
+            }
+        }
 
         if (spawnBone) {
             let bx = currentX;
@@ -512,7 +519,6 @@ function update() {
 
     player.speedModifier = 1.0; 
 
-    // 水たまり判定
     let onPuddle = false;
     obstacles.forEach(obs => {
         if (obs.type === 'puddle' && obs.active) {
@@ -525,13 +531,12 @@ function update() {
 
     if (onPuddle) {
         if (selectedCharKey === 'zuma') {
-            isZumaDashing = true; // ズーマのダッシュモードチャージ！
+            isZumaDashing = true; 
         } else {
             player.speedModifier = 0.5; 
         }
     }
 
-    // ズーマのダッシュ処理（着地するまで1.5倍速を維持）
     if (selectedCharKey === 'zuma' && isZumaDashing) {
         player.speedModifier = 1.5;
     }
@@ -574,10 +579,9 @@ function update() {
         if (player.y >= currentGroundY) {
             player.y = currentGroundY; player.vy = 0; 
             
-            // 地面（または坂）に完全着地した瞬間にジャンプ終了判定
             if (player.isJumping) {
                 player.isJumping = false;
-                if (selectedCharKey === 'zuma') isZumaDashing = false; // ズーマ：地面に着地したのでダッシュ終了
+                if (selectedCharKey === 'zuma') isZumaDashing = false; 
             }
             isHovering = false;
         }
@@ -585,7 +589,6 @@ function update() {
 
     cameraX = player.x - 100;
 
-    // クッキー回収
     cookies.forEach(cookie => {
         if (!cookie.collected &&
             player.x < cookie.x + cookie.width && player.x + player.width > cookie.x &&
@@ -594,7 +597,6 @@ function update() {
         }
     });
 
-    // 骨回収
     bones.forEach(bone => {
         if (!bone.collected &&
             player.x < bone.x + bone.width && player.x + player.width > bone.x &&
@@ -603,7 +605,6 @@ function update() {
         }
     });
 
-    // 新規：シールドアイテム回収判定
     shieldItems.forEach(shield => {
         if (!shield.collected &&
             player.x < shield.x + shield.width && player.x + player.width > shield.x &&
@@ -612,14 +613,13 @@ function update() {
             playSe(audioAssets.seHeal);
             
             if (selectedCharKey === 'rocky') {
-                hasRockyShield = true; // ロッキーはバリア復活！
+                hasRockyShield = true; 
             } else {
-                score += 3; // 他キャラならボーナスクッキー3個！
+                score += 3; 
             }
         }
     });
 
-    // 障害物衝突・踏みつけ判定
     obstacles.forEach(obs => {
         if (!obs.active || obs.type === 'pit' || currentState === STATES.GAMEOVER) return;
 
@@ -628,22 +628,20 @@ function update() {
         if (!isColliding) return;
 
         if (obs.type === 'car' || obs.type === 'box' || obs.type === 'cone') {
-            // 上から踏みつけたかどうかの判定
             if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
                 
                 if (selectedCharKey === 'marshall') {
-                    player.vy = -17.5; // マーシャル：超大ジャンプ（ハッキリと高い！）
+                    player.vy = -17.5; 
                 } else {
-                    player.vy = -14.5; // 通常キャラの踏みつけジャンプ
+                    player.vy = -14.5; 
                 }
                 
                 player.isJumping = true;
-                jumpCounter = charConfig.maxJumpFrames; // 踏みつけ時は追加上昇をカット
-                launchObstacleEffect(obs); // 確定で吹っ飛ばしエフェクト発生
+                jumpCounter = charConfig.maxJumpFrames; 
+                launchObstacleEffect(obs); 
                 playSe(audioAssets.seJump); 
             } else {
-                // 横から激突した
                 if (player.invincibleTimer === 0) { 
                     triggerDamage(); 
                     if (obs.active && !hasRockyShield) launchObstacleEffect(obs); 
@@ -686,7 +684,7 @@ function launchObstacleEffect(obs) {
     obs.active = false;
     fallingObstacles.push({
         type: obs.type, x: obs.x, y: obs.y, width: obs.width, height: obs.height,
-        vx: 4 + Math.random() * 4, vy: -10 - Math.random() * 5, // 吹っ飛ぶ勢いもマシマシに強化！
+        vx: 4 + Math.random() * 4, vy: -10 - Math.random() * 5, 
         gravity: 0.6, rotation: 0, rotSpeed: 0.25 + Math.random() * 0.25
     });
 }
@@ -883,11 +881,9 @@ function drawPlayScreen() {
     cookies.forEach(cookie => { if (!cookie.collected) { let cookieImg = imgAssets.items.cookie; if (cookieImg && cookieImg.complete) ctx.drawImage(cookieImg, cookie.x, cookie.y, cookie.width, cookie.height); } });
     bones.forEach(bone => { if (!bone.collected) { let boneImg = imgAssets.items.bone; if (boneImg && boneImg.complete) ctx.drawImage(boneImg, bone.x, bone.y, bone.width, bone.height); } });
     
-    // 新規：シールドアイテムの描画
     shieldItems.forEach(shield => { 
         if (!shield.collected) { 
             let sImg = imgAssets.items.rockyShield; 
-            // 上下に小さくフワフワ揺らす演出
             let animY = shield.y + Math.sin(gameFrame * 0.08) * 5;
             if (sImg && sImg.complete) ctx.drawImage(sImg, shield.x, animY, shield.width, shield.height); 
         } 
@@ -907,7 +903,6 @@ function drawPlayScreen() {
         let pImg = imgAssets.chars[selectedCharKey][activeImgKey];
         if (pImg && pImg.complete) ctx.drawImage(pImg, player.x, player.y, player.width, player.height);
 
-        // バリアのエフェクト描画（全キャラクター共通で、バリアを持っている時に表示されるように統合）
         if (hasRockyShield) {
             let sImg = imgAssets.items.rockyShield;
             if (sImg && sImg.complete) {
@@ -918,7 +913,6 @@ function drawPlayScreen() {
             }
         }
 
-        // ズーマ：ダッシュチャージ中の水しぶきエフェクト
         if (selectedCharKey === 'zuma' && isZumaDashing) {
             ctx.fillStyle = "rgba(30, 144, 255, 0.5)";
             for (let i = 0; i < 3; i++) {
