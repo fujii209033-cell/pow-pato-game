@@ -178,6 +178,25 @@ const modeButtons = {
     withLife: { x: 425, y: 160, width: 310, height: 140 }
 };
 
+// 🛠️ 文字ズレを地球上から根絶するために、ボタンをSVG画像化して埋め込み
+const btnImgNoLife = new Image();
+btnImgNoLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="310" height="140" viewBox="0 0 310 140">
+    <rect x="0" y="0" width="310" height="140" rx="20" fill="#10B981" />
+    <text x="155" y="58" font-family="sans-serif" font-weight="bold" font-size="22" fill="#FFFFFF" text-anchor="middle">💚 ライフなし</text>
+    <text x="155" y="98" font-family="sans-serif" font-weight="bold" font-size="15" fill="#FFFFFF" text-anchor="middle">(ぶつかっても ずっと走れるよ)</text>
+</svg>
+`);
+
+const btnImgWithLife = new Image();
+btnImgWithLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="310" height="140" viewBox="0 0 310 140">
+    <rect x="0" y="0" width="310" height="140" rx="20" fill="#EF4444" />
+    <text x="155" y="58" font-family="sans-serif" font-weight="bold" font-size="22" fill="#FFFFFF" text-anchor="middle">❤️ ライフあり (5つ)</text>
+    <text x="155" y="98" font-family="sans-serif" font-weight="bold" font-size="15" fill="#FFFFFF" text-anchor="middle">(5回ぶつかると ゲームオーバー)</text>
+</svg>
+`);
+
 // --- 画像アセット ---
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
 Object.keys(CHARACTER_CONFIG).forEach(charKey => {
@@ -652,7 +671,7 @@ function drawSelectButton(key, rect, config) {
     ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
-// 🛠️ 難易度選択画面（不要なrestoreを完全削除し、絶対中央揃えを保証）
+// 🛠️ 難易度選択画面（完全画像化したボタンを1枚絵としてスタンプするだけ）
 function drawModeSelectScreen() {
     ctx.fillStyle = "#FFFAF0"; 
     ctx.fillRect(0, 0, 800, 400);
@@ -664,41 +683,15 @@ function drawModeSelectScreen() {
     ctx.font = "bold 32px sans-serif"; 
     ctx.fillText("どちらの モードに する？", 400, 90);
 
-    // 共通の文字スタイル設定
-    ctx.textAlign = "center"; 
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#FFFFFF"; 
-
-    // --- 💚 ライフなし（左ボタン） ---
-    let b1 = modeButtons.noLife;
-    ctx.fillStyle = "#10B981"; 
-    ctx.beginPath(); 
-    ctx.roundRect(b1.x, b1.y, b1.width, b1.height, 20); 
-    ctx.fill();
+    // 💚 左ボタン（画像）の描画
+    if (btnImgNoLife.complete) {
+        ctx.drawImage(btnImgNoLife, modeButtons.noLife.x, modeButtons.noLife.y);
+    }
     
-    let b1CenterX = b1.x + (b1.width / 2);
-    ctx.fillStyle = "#FFFFFF"; 
-    ctx.font = "bold 21px sans-serif"; 
-    ctx.fillText("💚 ライフなし", b1CenterX, b1.y + 50);
-    ctx.font = "bold 15px sans-serif"; 
-    ctx.fillText("(ぶつかっても ずっと走れるよ)", b1CenterX, b1.y + 95);
-
-    // --- ❤️ ライフあり（右ボタン） ---
-    let b2 = modeButtons.withLife;
-    ctx.fillStyle = "#EF4444"; 
-    ctx.beginPath(); 
-    ctx.roundRect(b2.x, b2.y, b2.width, b2.height, 20); 
-    ctx.fill();
-    
-    let b2CenterX = b2.x + (b2.width / 2);
-    ctx.fillStyle = "#FFFFFF"; 
-    ctx.font = "bold 18px sans-serif"; // スマホで絶対にはみ出さない安全サイズ
-    ctx.fillText("❤️ ライフあり (5つ)", b2CenterX, b2.y + 50);
-    ctx.font = "bold 15px sans-serif"; 
-    ctx.fillText("(5回ぶつかると ゲームオーバー)", b2CenterX, b2.y + 95);
-    
-    // 後続処理のためにデフォルトに戻す
-    ctx.textBaseline = "alphabetic";
+    // ❤️ 右ボタン（画像）の描画
+    if (btnImgWithLife.complete) {
+        ctx.drawImage(btnImgWithLife, modeButtons.withLife.x, modeButtons.withLife.y);
+    }
 }
 
 function drawPlayScreen() {
