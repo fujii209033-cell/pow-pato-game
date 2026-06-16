@@ -178,7 +178,7 @@ const modeButtons = {
     withLife: { x: 425, y: 160, width: 310, height: 140 }
 };
 
-// 🛠️ 文字ズレを地球上から根絶するために、ボタンをSVG画像化して埋め込み
+// 文字ズレ防止用ボタンSVG画像データ
 const btnImgNoLife = new Image();
 btnImgNoLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="310" height="140" viewBox="0 0 310 140">
@@ -671,24 +671,20 @@ function drawSelectButton(key, rect, config) {
     ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
-// 🛠️ 難易度選択画面（完全画像化したボタンを1枚絵としてスタンプするだけ）
 function drawModeSelectScreen() {
     ctx.fillStyle = "#FFFAF0"; 
     ctx.fillRect(0, 0, 800, 400);
     
-    // タイトル
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#1E293B"; 
     ctx.font = "bold 32px sans-serif"; 
     ctx.fillText("どちらの モードに する？", 400, 90);
 
-    // 💚 左ボタン（画像）の描画
     if (btnImgNoLife.complete) {
         ctx.drawImage(btnImgNoLife, modeButtons.noLife.x, modeButtons.noLife.y);
     }
     
-    // ❤️ 右ボタン（画像）の描画
     if (btnImgWithLife.complete) {
         ctx.drawImage(btnImgWithLife, modeButtons.withLife.x, modeButtons.withLife.y);
     }
@@ -700,7 +696,24 @@ function drawPlayScreen() {
     ctx.save(); ctx.translate(-cameraX * 0.3, 0);
     bgBuildings.forEach(b => {
         let baseFloorY = BASE_GROUND_Y + 60; ctx.fillStyle = b.color;
+        // 建物本体
         ctx.fillRect(b.x, baseFloorY - b.height, b.width, b.height);
+        
+        // 🛠️ 窓の復活描写ロジック
+        ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+        let winRows = Math.floor(b.height / 40) - 1;
+        let winCols = Math.floor(b.width / 35);
+        for (let r = 0; r < winRows; r++) {
+            for (let c = 0; c < winCols; c++) {
+                let wx = b.x + 12 + c * 32;
+                let wy = (baseFloorY - b.height) + 15 + r * 35;
+                if (wx + 16 < b.x + b.width) {
+                    ctx.fillRect(wx, wy, 16, 18);
+                }
+            }
+        }
+
+        // 屋根
         if (b.roof === 'triangle') {
             ctx.fillStyle = "#E11D48"; ctx.beginPath(); ctx.moveTo(b.x - 8, baseFloorY - b.height); ctx.lineTo(b.x + b.width / 2, baseFloorY - b.height - 35); ctx.lineTo(b.x + b.width + 8, baseFloorY - b.height); ctx.closePath(); ctx.fill();
         } else if (b.roof === 'dome') {
@@ -856,7 +869,7 @@ function handleInputStart(clientX, clientY) {
         } else if (clickX >= charButtons.marshall.x && clickX <= charButtons.marshall.x + charButtons.marshall.width &&
                    clickY >= charButtons.marshall.y && clickY <= charButtons.marshall.y + charButtons.marshall.height) {
             selectedCharKey = 'marshall'; currentState = STATES.MODE_SELECT; 
-        } else if (clickX >= charButtons.rubble.x && clickX <= charButtons.rubble.x + charButtons.rubble.width &&
+        } else if (clickX >= rubble.x && clickX <= charButtons.rubble.x + charButtons.rubble.width &&
                    clickY >= charButtons.rubble.y && clickY <= charButtons.rubble.y + charButtons.rubble.height) {
             selectedCharKey = 'rubble'; currentState = STATES.MODE_SELECT; 
         }
