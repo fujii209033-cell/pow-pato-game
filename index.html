@@ -36,7 +36,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 高解像度ディスプレイでのボヤけ・文字ズレを完全に防ぐ特殊処理
+// 高解像度ディスプレイでのボヤけ・文字ズレを完全に防ぐ処理
 function resizeCanvasForRetina() {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -147,7 +147,7 @@ const CHARACTER_CONFIG = {
         name: "ラブル", color: "#EAB308",
         baseSpeed: 5.0, jumpPower: 12.0, maxJumpFrames: 17,
         skillTitle: "🏗️ パワー・リカバリー",
-        skillDesc: "あなに おちても 3かいまで ド根性でふっかつ！",
+        skillDesc: "あなに おちても 3かいまで ド根性でふっかつするぞ！",
         images: { run1: "images/rubble_run1.png", run2: "images/rubble_run2.png", jump: "images/rubble_jump.png" }
     },
     skye: {
@@ -161,14 +161,14 @@ const CHARACTER_CONFIG = {
         name: "ロッキー", color: "#10B981",
         baseSpeed: 5.4, jumpPower: 11.4, maxJumpFrames: 15,
         skillTitle: "🔧 リサイクル・バリア",
-        skillDesc: "バリアで ままもられるぞ！ステージでも バリアをひろえる！",
+        skillDesc: "バリアで まもられるぞ！ステージでも ひろうことができる！",
         images: { run1: "images/rocky_run1.png", run2: "images/rocky_run2.png", jump: "images/rocky_jump.png" }
     },
     zuma: {
         name: "ズーマ", color: "#F97316",
         baseSpeed: 5.6, jumpPower: 11.4, maxJumpFrames: 15,
-        skillTitle: "🌊 ホバークラフト・ダッシュ",
-        skillDesc: "みずたまりに はいると、チャージされて ずっとダッシュ！",
+        skillTitle: "🌊 ホバーダッシュ",
+        skillDesc: "みずたまりに はいると チャージされて ずっとダッシュ！",
         images: { run1: "images/zuma_run1.png", run2: "images/zuma_run2.png", jump: "images/zuma_jump.png" }
     }
 };
@@ -186,17 +186,11 @@ const popupSelectBtn = { x: 300, y: 285, width: 200, height: 50 };
 let isInputPressing = false;
 let jumpCounter = 0; 
 
-// スカイ用ホバー変数
+// 各キャラ固有スキル用変数
 let isHovering = false;
 let hoverTimer = 0;
-
-// ロッキー用シールド変数
 let hasRockyShield = false;
-
-// ラブル用復活回数
 let rubbleRecoveryCount = 0;
-
-// ズーマ用持続ダッシュフラグ
 let isZumaDashing = false;
 
 // --- ボタンの配置定義 ---
@@ -257,7 +251,6 @@ imgAssets.items.pawStation.src = "images/paw_station.png";
 imgAssets.items.rockyShield = new Image();
 imgAssets.items.rockyShield.src = "images/rocky_shield.png";
 
-// 【修正箇所】外部ファイルを読み込まず、安全な内蔵SVGデータに変更してエラーを回避
 imgAssets.items.spring = new Image();
 imgAssets.items.spring.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="50" height="40" viewBox="0 0 50 40">
@@ -371,8 +364,14 @@ function initGame() {
     const types = ['car', 'moving_car', 'box', 'cone', 'cat', 'puddle', 'pit', 'spring'];
     for (let i = 0; i < 40; i++) {
         let type = types[Math.floor(Math.random() * types.length)];
-        let obsWidth = 50; let obsHeight = 50;
         let ox = 600 + i * 360 + Math.random() * 60;
+
+        // 【修正箇所①】動く車（moving_car）の生成位置が前半（全距離の半分未満）だった場合は通常の車に変更
+        if (type === 'moving_car' && ox < goalX / 2) {
+            type = 'car';
+        }
+
+        let obsWidth = 50; let obsHeight = 50;
         let groundY = getGroundY(ox);
         let obsY = groundY;
 
@@ -807,10 +806,35 @@ function drawSelectButton(key, rect, config) {
     
     let currentImgKey = (Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2';
     let img = imgAssets.chars[key][currentImgKey];
-    if (img && img.complete) ctx.drawImage(img, rect.x + 10, rect.y + 15, 80, 80);
+    if (img && img.complete) ctx.drawImage(img, rect.x + 8, rect.y + 20, 70, 70);
     
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.fillText(config.name, rect.x + 100, rect.y + rect.height / 2);
+    // 【修正箇所②】ボタン内テキストのフォントサイズ調整とはみ出し防止
+    ctx.fillStyle = "#1E293B"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(config.name, rect.x + 84, rect.y + rect.height / 2);
+}
+
+// 文字列を一定幅で折り返す補助関数
+function wrapText(context, text, x, y, maxWidth, lineHeight) {
+    let words = text.split("");
+    let line = "";
+    let lines = [];
+
+    for (let n = 0; n < words.length; n++) {
+        let testLine = line + words[n];
+        let metrics = context.measureText(testLine);
+        let testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+            lines.push(line);
+            line = words[n];
+        } else {
+            line = testLine;
+        }
+    }
+    lines.push(line);
+
+    for (let i = 0; i < lines.length; i++) {
+        context.fillText(lines[i], x, y + (i * lineHeight));
+    }
 }
 
 function drawCharPopupScreen() {
@@ -844,16 +868,17 @@ function drawCharPopupScreen() {
 
     ctx.textAlign = "left";
     ctx.fillStyle = config.color;
-    ctx.font = "bold 32px sans-serif";
+    ctx.font = "bold 30px sans-serif";
     ctx.fillText(config.name, popupRect.x + 180, popupRect.y + 75);
 
     ctx.fillStyle = "#1E293B";
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText(config.skillTitle, popupRect.x + 180, popupRect.y + 125);
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText(config.skillTitle, popupRect.x + 180, popupRect.y + 120);
 
+    // 【修正箇所②】詳細説明が長くてもポップアップから絶対にはみ出さないよう、自動折り返し描画を適用
     ctx.fillStyle = "#475569";
-    ctx.font = "bold 16px sans-serif";
-    ctx.fillText(config.skillDesc, popupRect.x + 180, popupRect.y + 165);
+    ctx.font = "bold 15px sans-serif";
+    wrapText(ctx, config.skillDesc, popupRect.x + 180, popupRect.y + 155, 290, 22);
 
     ctx.fillStyle = config.color;
     ctx.beginPath();
@@ -1029,7 +1054,7 @@ function drawRankingViewScreen() {
     });
 
     ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(rankingBackButton.x, rankingBackButton.y, rankingBackButton.width, rankingBackButton.height, 15); ctx.fill();
-    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2; stroke();
+    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("もどる", rankingBackButton.x + (rankingBackButton.width / 2), rankingBackButton.y + (rankingBackButton.height / 2));
     ctx.textBaseline = "alphabetic";
 }
