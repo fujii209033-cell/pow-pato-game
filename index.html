@@ -36,7 +36,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 高解像度ディスプレイ（スマホ実機）での文字ズレ・ボヤけを完全に防げる特殊処理
+// 高解像度ディスプレイでのボヤけ・文字ズレを完全に防ぐ特殊処理
 function resizeCanvasForRetina() {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -127,31 +127,37 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pagehide", stopBgmOnHide);
 window.addEventListener("pageshow", resumeBgmOnShow);
 
-// --- キャラクターの定数定義 ---
+// --- キャラクターの定数定義（全6人に拡張） ---
 const CHARACTER_CONFIG = {
     chase: {
-        name: "チェイス",
-        color: "#1E3A8A",
-        baseSpeed: 5.8,        
-        jumpPower: 11.2,       
-        maxJumpFrames: 14,     
+        name: "チェイス", color: "#1E3A8A",
+        baseSpeed: 6.8, jumpPower: 11.2, maxJumpFrames: 14, // ⚡スピードスター、横に長く飛べる
         images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
     },
     marshall: {
-        name: "マーシャル",
-        color: "#DC2626",
-        baseSpeed: 5.3,
-        jumpPower: 11.6,       
-        maxJumpFrames: 15,
+        name: "マーシャル", color: "#DC2626",
+        baseSpeed: 5.3, jumpPower: 11.6, maxJumpFrames: 15, // 🔥踏みつけウルトラハイジャンプ
         images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
     },
     rubble: {
-        name: "ラブル",
-        color: "#EAB308",
-        baseSpeed: 5.0,
-        jumpPower: 12.0,
-        maxJumpFrames: 17,
+        name: "ラブル", color: "#EAB308",
+        baseSpeed: 5.0, jumpPower: 12.0, maxJumpFrames: 17, // 🏗️穴落ちド根性復活
         images: { run1: "images/rubble_run1.png", run2: "images/rubble_run2.png", jump: "images/rubble_jump.png" }
+    },
+    skye: {
+        name: "スカイ", color: "#EC4899",
+        baseSpeed: 5.8, jumpPower: 11.8, maxJumpFrames: 15, // 🚀空中ホバー飛行
+        images: { run1: "images/skye_run1.png", run2: "images/skye_run2.png", jump: "images/skye_jump.png" }
+    },
+    rocky: {
+        name: "ロッキー", color: "#10B981",
+        baseSpeed: 5.4, jumpPower: 11.4, maxJumpFrames: 15, // 🔧身代わりリサイクルシールド
+        images: { run1: "images/rocky_run1.png", run2: "images/rocky_run2.png", jump: "images/rocky_jump.png" }
+    },
+    zuma: {
+        name: "ズーマ", color: "#F97316",
+        baseSpeed: 5.6, jumpPower: 11.4, maxJumpFrames: 15, // 🌊水たまりダッシュ加速
+        images: { run1: "images/zuma_run1.png", run2: "images/zuma_run2.png", jump: "images/zuma_jump.png" }
     }
 };
 
@@ -161,15 +167,29 @@ let isLifeMode = true;
 let isInputPressing = false;
 let jumpCounter = 0; 
 
+// スカイ用ホバー変数
+let isHovering = false;
+let hoverTimer = 0;
+
+// ロッキー用シールド変数
+let hasRockyShield = false;
+
+// ラブル用復活回数
+let rubbleRecoveryCount = 0;
+
 // --- ボタンの配置定義 ---
 const pauseButton = { x: 730, y: 15, width: 50, height: 50 };
 const rankingButton = { x: 30, y: 330, width: 160, height: 45 };
 const rankingBackButton = { x: 320, y: 320, width: 160, height: 50 };
 
+// キャラクター選択ボタン（上段3人・下段3人の2段構成に美しくリサイズ）
 const charButtons = {
-    chase: { x: 40, y: 140, width: 220, height: 180 },
-    marshall: { x: 290, y: 140, width: 220, height: 180 },
-    rubble: { x: 540, y: 140, width: 220, height: 180 }
+    chase:    { x: 50,  y: 110, width: 210, height: 110 },
+    marshall: { x: 295, y: 110, width: 210, height: 110 },
+    rubble:   { x: 540, y: 110, width: 210, height: 110 },
+    skye:     { x: 50,  y: 245, width: 210, height: 110 },
+    rocky:    { x: 295, y: 245, width: 210, height: 110 },
+    zuma:     { x: 540, y: 245, width: 210, height: 110 }
 };
 
 // モード選択ボタンの当たり判定位置
@@ -212,6 +232,8 @@ imgAssets.items.bone = new Image();
 imgAssets.items.bone.src = "images/bone.png";
 imgAssets.items.pawStation = new Image();
 imgAssets.items.pawStation.src = "images/paw_station.png";
+imgAssets.items.rockyShield = new Image();
+imgAssets.items.rockyShield.src = "images/rocky_shield.png";
 
 const obstacleImages = { car: "images/car.png", box: "images/box.png", cone: "images/cone.png", cat: "images/cat.png", puddle: "images/puddle.png" };
 Object.keys(obstacleImages).forEach(key => {
@@ -277,6 +299,12 @@ function initGame() {
     droppedCookies = [];
     fallingObstacles = [];
     jumpCounter = 0;
+
+    // スキル用変数の初期化
+    isHovering = false;
+    hoverTimer = 0;
+    hasRockyShield = (selectedCharKey === 'rocky'); // ロッキーならシールド装備
+    rubbleRecoveryCount = 0;
 
     slopePoints = [];
     let numPoints = Math.ceil(goalX / SLOPE_INTERVAL) + 5;
@@ -378,6 +406,15 @@ function initGame() {
 
 function triggerDamage() {
     if (player.invincibleTimer > 0) return; 
+
+    // 🔧 ロッキーの固有能力：リサイクル・バリア
+    if (selectedCharKey === 'rocky' && hasRockyShield) {
+        hasRockyShield = false;
+        player.invincibleTimer = 60; // 短い無敵時間
+        playSe(audioAssets.seHeal); // ガード音の代わり
+        return;
+    }
+
     playSe(audioAssets.seDamage);
     
     if (isLifeMode) {
@@ -401,6 +438,17 @@ function triggerDamage() {
 }
 
 function triggerPitFall() {
+    // 🏗️ ラブルの固有能力：ド根性復活（3回まで穴に落ちてもノーダメージで自動大ジャンプ）
+    if (selectedCharKey === 'rubble' && rubbleRecoveryCount < 3) {
+        rubbleRecoveryCount++;
+        player.isFallingInPit = false;
+        player.vy = -14; // 強力な大ジャンプで穴から這い上がる
+        player.isJumping = true;
+        jumpCounter = 0;
+        playSe(audioAssets.seJump);
+        return;
+    }
+
     playSe(audioAssets.sePit);
 
     if (isLifeMode) {
@@ -453,9 +501,38 @@ function update() {
 
     player.speedModifier = 1.0; 
 
-    if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
-        player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames));
-        jumpCounter++;
+    // 🌊 ズーマの固有能力：水たまりの上で加速（通常キャラは減速）
+    let onPuddle = false;
+    obstacles.forEach(obs => {
+        if (obs.type === 'puddle' && obs.active) {
+            if (player.x + player.width > obs.x && player.x < obs.x + obs.width &&
+                player.y + player.height >= obs.y - 5 && player.y + player.height <= obs.y + obs.height + 10) {
+                onPuddle = true;
+            }
+        }
+    });
+
+    if (onPuddle) {
+        if (selectedCharKey === 'zuma') {
+            player.speedModifier = 1.5; // ズーマは1.5倍に大加速！
+        } else {
+            player.speedModifier = 0.5; // 他のキャラは半分に減速
+        }
+    }
+
+    // 🚀 スカイの固有能力：空中ホバー飛行
+    if (selectedCharKey === 'skye' && isHovering) {
+        player.vy = 0; // 重力を無視して水平に浮く
+        hoverTimer--;
+        if (hoverTimer <= 0 || !isInputPressing) {
+            isHovering = false;
+        }
+    } else {
+        // 通常の重力処理
+        if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
+            player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames));
+            jumpCounter++;
+        }
     }
 
     let nextX = player.x + charConfig.baseSpeed * player.speedModifier;
@@ -470,7 +547,10 @@ function update() {
     });
 
     player.x = nextX;
-    player.vy += player.gravity; player.y += player.vy;
+    if (!(selectedCharKey === 'skye' && isHovering)) {
+        player.vy += player.gravity;
+    }
+    player.y += player.vy;
 
     if (currentPit) {
         if (player.y >= targetGroundY) {
@@ -483,6 +563,7 @@ function update() {
         let currentGroundY = getGroundY(player.x);
         if (player.y >= currentGroundY) {
             player.y = currentGroundY; player.vy = 0; player.isJumping = false;
+            isHovering = false; // 地面に着いたらホバーリセット
         }
     }
 
@@ -518,18 +599,23 @@ function update() {
         if (obs.type === 'car' || obs.type === 'box' || obs.type === 'cone') {
             if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20) {
                 player.y = obs.y - player.height;
-                player.vy = -14.5; 
+                
+                // 🔥 マーシャルの固有能力：踏みつけ時にウルトラハイジャンプ
+                if (selectedCharKey === 'marshall') {
+                    player.vy = -17.5; // 普通のキャラ(-14.5)より遥かに高く飛ぶ！
+                } else {
+                    player.vy = -14.5; 
+                }
+
                 player.isJumping = true;
                 jumpCounter = charConfig.maxJumpFrames; 
                 launchObstacleEffect(obs);
                 playSe(audioAssets.seJump); 
             } else {
-                if (player.invincibleTimer === 0) { triggerDamage(); if(obs.active) launchObstacleEffect(obs); }
+                if (player.invincibleTimer === 0) { triggerDamage(); if(obs.active && !hasRockyShield) launchObstacleEffect(obs); }
             }
         } else if (obs.type === 'cat') {
-            if (player.invincibleTimer === 0) { triggerDamage(); if(obs.active) launchObstacleEffect(obs); }
-        } else if (obs.type === 'puddle') {
-            player.speedModifier = 0.5; 
+            if (player.invincibleTimer === 0) { triggerDamage(); if(obs.active && !hasRockyShield) launchObstacleEffect(obs); }
         }
     });
 
@@ -537,7 +623,18 @@ function update() {
 }
 
 function triggerJumpStart() {
-    if (!player.isJumping && !player.isFallingInPit) {
+    if (player.isFallingInPit) return;
+
+    // 🚀 スカイの固有能力：空中でもう一度長押しタップするとホバー飛行開始
+    if (selectedCharKey === 'skye' && player.isJumping && !isHovering) {
+        isHovering = true;
+        hoverTimer = 55; // ホバー可能なフレーム数（約1秒弱）
+        isInputPressing = true;
+        playSe(audioAssets.seJump);
+        return;
+    }
+
+    if (!player.isJumping) {
         const charConfig = CHARACTER_CONFIG[selectedCharKey];
         player.vy = -charConfig.jumpPower; 
         player.isJumping = true;
@@ -549,6 +646,9 @@ function triggerJumpStart() {
 
 function triggerJumpEnd() {
     isInputPressing = false;
+    if (selectedCharKey === 'skye') {
+        isHovering = false; // ボタンを離したらホバー解除
+    }
 }
 
 function triggerGameOver() {
@@ -648,27 +748,32 @@ function drawTitleScreen() {
 
 function drawCharSelectScreen() {
     ctx.fillStyle = "#E0F2FE"; ctx.fillRect(0, 0, 800, 400);
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = "#1E293B"; ctx.font = "bold 30px sans-serif"; ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText("だれで あそぶ？", 400, 80);
+    ctx.fillText("だれで あそぶ？", 400, 60);
     
+    // 6つのボタンを描画（2段レイアウト）
     drawSelectButton('chase', charButtons.chase, CHARACTER_CONFIG.chase);
     drawSelectButton('marshall', charButtons.marshall, CHARACTER_CONFIG.marshall);
     drawSelectButton('rubble', charButtons.rubble, CHARACTER_CONFIG.rubble);
+    drawSelectButton('skye', charButtons.skye, CHARACTER_CONFIG.skye);
+    drawSelectButton('rocky', charButtons.rocky, CHARACTER_CONFIG.rocky);
+    drawSelectButton('zuma', charButtons.zuma, CHARACTER_CONFIG.zuma);
 }
 
 function drawSelectButton(key, rect, config) {
-    ctx.fillStyle = config.color; ctx.beginPath(); ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 20); ctx.fill();
-    ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.roundRect(rect.x + 8, rect.y + 8, rect.width - 16, rect.height - 16, 15); ctx.fill();
+    ctx.fillStyle = config.color; ctx.beginPath(); ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 15); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.roundRect(rect.x + 5, rect.y + 5, rect.width - 10, rect.height - 10, 12); ctx.fill();
+    
     let currentImgKey = (Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2';
     let img = imgAssets.chars[key][currentImgKey];
-    if (img && img.complete) ctx.drawImage(img, rect.x + rect.width/2 - 45, rect.y + 20, 90, 90);
+    if (img && img.complete) ctx.drawImage(img, rect.x + 10, rect.y + 15, 80, 80);
     
     ctx.fillStyle = "#1E293B"; 
-    ctx.font = "bold 24px sans-serif"; 
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
+    ctx.font = "bold 18px sans-serif"; 
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(config.name, rect.x + 100, rect.y + rect.height / 2);
 }
 
 function drawModeSelectScreen() {
@@ -684,7 +789,6 @@ function drawModeSelectScreen() {
     if (btnImgNoLife.complete) {
         ctx.drawImage(btnImgNoLife, modeButtons.noLife.x, modeButtons.noLife.y);
     }
-    
     if (btnImgWithLife.complete) {
         ctx.drawImage(btnImgWithLife, modeButtons.withLife.x, modeButtons.withLife.y);
     }
@@ -696,10 +800,8 @@ function drawPlayScreen() {
     ctx.save(); ctx.translate(-cameraX * 0.3, 0);
     bgBuildings.forEach(b => {
         let baseFloorY = BASE_GROUND_Y + 60; ctx.fillStyle = b.color;
-        // 建物本体
         ctx.fillRect(b.x, baseFloorY - b.height, b.width, b.height);
         
-        // 🛠️ 窓の復活描写ロジック
         ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
         let winRows = Math.floor(b.height / 40) - 1;
         let winCols = Math.floor(b.width / 35);
@@ -713,7 +815,6 @@ function drawPlayScreen() {
             }
         }
 
-        // 屋根
         if (b.roof === 'triangle') {
             ctx.fillStyle = "#E11D48"; ctx.beginPath(); ctx.moveTo(b.x - 8, baseFloorY - b.height); ctx.lineTo(b.x + b.width / 2, baseFloorY - b.height - 35); ctx.lineTo(b.x + b.width + 8, baseFloorY - b.height); ctx.closePath(); ctx.fill();
         } else if (b.roof === 'dome') {
@@ -752,9 +853,25 @@ function drawPlayScreen() {
 
     let shouldDrawPlayer = true; if (player.invincibleTimer > 0 && Math.floor(player.invincibleTimer / 4) % 2 === 0) shouldDrawPlayer = false;
     if (shouldDrawPlayer) {
-        let activeImgKey = 'run1'; if (player.isFallingInPit || player.isJumping) activeImgKey = 'jump'; else activeImgKey = (Math.floor(gameFrame / 10) % 2 === 0) ? 'run1' : 'run2';
+        let activeImgKey = 'run1'; 
+        if (player.isFallingInPit || player.isJumping || isHovering) {
+            activeImgKey = 'jump';
+        } else {
+            activeImgKey = (Math.floor(gameFrame / 10) % 2 === 0) ? 'run1' : 'run2';
+        }
         let pImg = imgAssets.chars[selectedCharKey][activeImgKey];
         if (pImg && pImg.complete) ctx.drawImage(pImg, player.x, player.y, player.width, player.height);
+
+        // 🔧 ロッキーのシールドエフェクト描画
+        if (selectedCharKey === 'rocky' && hasRockyShield) {
+            let sImg = imgAssets.items.rockyShield;
+            if (sImg && sImg.complete) {
+                ctx.drawImage(sImg, player.x - 10, player.y - 10, player.width + 20, player.height + 20);
+            } else {
+                ctx.strokeStyle = "rgba(16, 185, 129, 0.6)"; ctx.lineWidth = 4; ctx.beginPath();
+                ctx.arc(player.x + player.width/2, player.y + player.height/2, player.width/1.3, 0, Math.PI*2); ctx.stroke();
+            }
+        }
     }
     ctx.restore();
 
@@ -863,16 +980,15 @@ function handleInputStart(clientX, clientY) {
             currentState = STATES.TITLE;
         }
     } else if (currentState === STATES.CHAR_SELECT) {
-        if (clickX >= charButtons.chase.x && clickX <= charButtons.chase.x + charButtons.chase.width &&
-            clickY >= charButtons.chase.y && clickY <= charButtons.chase.y + charButtons.chase.height) {
-            selectedCharKey = 'chase'; currentState = STATES.MODE_SELECT; 
-        } else if (clickX >= charButtons.marshall.x && clickX <= charButtons.marshall.x + charButtons.marshall.width &&
-                   clickY >= charButtons.marshall.y && clickY <= charButtons.marshall.y + charButtons.marshall.height) {
-            selectedCharKey = 'marshall'; currentState = STATES.MODE_SELECT; 
-        } else if (clickX >= rubble.x && clickX <= charButtons.rubble.x + charButtons.rubble.width &&
-                   clickY >= charButtons.rubble.y && clickY <= charButtons.rubble.y + charButtons.rubble.height) {
-            selectedCharKey = 'rubble'; currentState = STATES.MODE_SELECT; 
-        }
+        // 6人の選択当たり判定
+        Object.keys(charButtons).forEach(key => {
+            let btn = charButtons[key];
+            if (clickX >= btn.x && clickX <= btn.x + btn.width &&
+                clickY >= btn.y && clickY <= btn.y + btn.height) {
+                selectedCharKey = key;
+                currentState = STATES.MODE_SELECT;
+            }
+        });
     } else if (currentState === STATES.MODE_SELECT) {
         if (clickX >= modeButtons.noLife.x && clickX <= modeButtons.noLife.x + modeButtons.noLife.width &&
             clickY >= modeButtons.noLife.y && clickY <= modeButtons.noLife.y + modeButtons.noLife.height) {
