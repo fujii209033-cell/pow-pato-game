@@ -156,10 +156,10 @@ const charButtons = {
     rubble: { x: 540, y: 140, width: 220, height: 180 }
 };
 
-// 🛠️ 難易度選択画面のボタン位置（横幅を少し広げ、左右の間隔を調整しました）
+// 🛠️ モード選択ボタンの当たり判定位置を再調整（画面内 800px に綺麗に収まる設計）
 const modeButtons = {
-    noLife: { x: 60, y: 160, width: 310, height: 140 },
-    withLife: { x: 430, y: 160, width: 310, height: 140 }
+    noLife: { x: 65, y: 160, width: 310, height: 140 },
+    withLife: { x: 425, y: 160, width: 310, height: 140 }
 };
 
 // --- 画像アセット ---
@@ -651,23 +651,38 @@ function drawSelectButton(key, rect, config) {
     ctx.fillText(config.name, rect.x + rect.width / 2, rect.y + 150);
 }
 
-// 🛠️ 難易度（モード）選択画面の描画（文字サイズとレイアウトをスッキリ修正）
+// 🛠️ 難易度選択画面の描画（計算式を一新し、文字がボタンのセンターに絶対配置されるよう修正）
 function drawModeSelectScreen() {
     ctx.fillStyle = "#FFFAF0"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.textAlign = "center";
     ctx.fillText("どちらの モードに する？", canvas.width / 2, 90);
 
-    // ライフなし（あんしん練習モード）
-    ctx.fillStyle = "#10B981"; ctx.beginPath(); ctx.roundRect(modeButtons.noLife.x, modeButtons.noLife.y, modeButtons.noLife.width, modeButtons.noLife.height, 20); ctx.fill();
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; // 24px -> 20px
-    ctx.fillText("💚 ライフなし", modeButtons.noLife.x + modeButtons.noLife.width / 2, modeButtons.noLife.y + 60);
-    ctx.font = "15px sans-serif"; ctx.fillText("(ぶつかっても ずっと走れるよ)", modeButtons.noLife.x + modeButtons.noLife.width / 2, modeButtons.noLife.y + 100);
+    // 1行に表示できる幅を持たせるため、フォントサイズを18pxに安全調整
+    ctx.textAlign = "center";
 
-    // ライフあり（ドキドキ挑戦モード）
-    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(modeButtons.withLife.x, modeButtons.withLife.y, modeButtons.withLife.width, modeButtons.withLife.height, 20); ctx.fill();
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; // 24px -> 20px
-    ctx.fillText("❤️ ライフあり (5つ)", modeButtons.withLife.x + modeButtons.withLife.width / 2, modeButtons.withLife.y + 60);
-    ctx.font = "15px sans-serif"; ctx.fillText("(5回ぶつかると ゲームオーバー)", modeButtons.withLife.x + modeButtons.withLife.width / 2, modeButtons.withLife.y + 100);
+    // --- 💚 ライフなし（あんしん練習モード） ---
+    let b1 = modeButtons.noLife;
+    ctx.fillStyle = "#10B981"; ctx.beginPath(); ctx.roundRect(b1.x, b1.y, b1.width, b1.height, 20); ctx.fill();
+    
+    // ボタンの完全な中心点のX座標を計算
+    let b1CenterX = b1.x + (b1.width / 2);
+    ctx.fillStyle = "#FFFFFF"; 
+    ctx.font = "bold 18px sans-serif"; 
+    ctx.fillText("💚 ライフなし", b1CenterX, b1.y + 55);
+    ctx.font = "14px sans-serif"; 
+    ctx.fillText("(ぶつかっても ずっと走れるよ)", b1CenterX, b1.y + 95);
+
+    // --- ❤️ ライフあり（ドキドキ挑戦モード） ---
+    let b2 = modeButtons.withLife;
+    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(b2.x, b2.y, b2.width, b2.height, 20); ctx.fill();
+    
+    // ボタンの完全な中心点のX座標を計算
+    let b2CenterX = b2.x + (b2.width / 2);
+    ctx.fillStyle = "#FFFFFF"; 
+    ctx.font = "bold 18px sans-serif"; 
+    ctx.fillText("❤️ ライフあり (5つ)", b2CenterX, b2.y + 55);
+    ctx.font = "14px sans-serif"; 
+    ctx.fillText("(5回ぶつかると ゲームオーバー)", b2CenterX, b2.y + 95);
 }
 
 function drawPlayScreen() {
