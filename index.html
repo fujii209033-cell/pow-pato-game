@@ -122,15 +122,15 @@ function playSe(targetSe) {
     targetSe.play().catch(e => {});
 }
 
-// --- キャラクターの定数・インラインSVG定義（①の修正：外部画像への依存を完全排除） ---
+// --- 【①修正】全キャラクターのSVGコードのタイポを完全クリアに修正 ---
 const CHARACTER_CONFIG = {
     chase: {
         name: "チェイス", color: "#1E3A8A", baseSpeed: 6.8, jumpPower: 11.2, maxJumpFrames: 14,
         skillTitle: "⚡ パウ・ダッシュ", skillDesc: "はしるスピードが いちばん はやいぞ！",
         svg: {
-            run1: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="15" width="30" height="30" rx="8" fill="#1E3A8A"/><circle cx="25" cy="25" r="4" fill="#FFF"/><circle cx="25" cy="25" r="2" fill="#000"/><polygon points="10,10 20,15 15,25" fill="#1E3A8A"/><rect x="18" y="45" width="6" height="12" fill="#YF59E0B"/><rect x="36" y="45" width="6" height="12" fill="#F59E0B"/><path d="M 20,35 Q 30,45 40,35" stroke="#FFF" stroke-width="2" fill="none"/><rect x="20" y="28" width="20" height="6" fill="#F59E0B"/></svg>`,
-            run2: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="12" width="30" height="30" rx="8" fill="#1E3A8A"/><circle cx="25" cy="22" r="4" fill="#FFF"/><circle cx="25" cy="22" r="2" fill="#000"/><polygon points="10,7 20,12 15,22" fill="#1E3A8A"/><rect x="22" y="42" width="6" height="12" fill="#F59E0B"/><rect x="32" y="42" width="6" height="12" fill="#F59E0B"/><path d="M 20,32 Q 30,42 40,32" stroke="#FFF" stroke-width="2" fill="none"/><rect x="20" y="25" width="20" height="6" fill="#F59E0B"/></svg>`,
-            jump: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="10" width="30" height="30" rx="8" fill="#1E3A8A"/><circle cx="25" cy="20" r="4" fill="#FFF"/><circle cx="25" cy="20" r="2" fill="#000"/><polygon points="10,5 20,10 15,20" fill="#1E3A8A"/><rect x="14" y="40" width="8" height="10" fill="#F59E0B" transform="rotate(20 18 45)"/><rect x="38" y="40" width="8" height="10" fill="#F59E0B" transform="rotate(-20 42 45)"/><rect x="20" y="23" width="20" height="6" fill="#F59E0B"/></svg>`
+            run1: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="15" width="30" height="30" rx="8" fill="#1E3A8A"/><circle cx="23" cy="25" r="4" fill="#FFF"/><circle cx="23" cy="25" r="2" fill="#000"/><polygon points="10,10 20,15 15,25" fill="#1E3A8A"/><rect x="18" y="45" width="6" height="12" fill="#F59E0B"/><rect x="36" y="45" width="6" height="12" fill="#F59E0B"/><path d="M 20,35 Q 30,45 40,35" stroke="#FFF" stroke-width="2" fill="none"/><rect x="20" y="28" width="20" height="6" fill="#F59E0B"/></svg>`,
+            run2: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="12" width="30" height="30" rx="8" fill="#1E3A8A"/><circle cx="23" cy="22" r="4" fill="#FFF"/><circle cx="23" cy="22" r="2" fill="#000"/><polygon points="10,7 20,12 15,22" fill="#1E3A8A"/><rect x="22" y="42" width="6" height="12" fill="#F59E0B"/><rect x="32" y="42" width="6" height="12" fill="#F59E0B"/><path d="M 20,32 Q 30,42 40,32" stroke="#FFF" stroke-width="2" fill="none"/><rect x="20" y="25" width="20" height="6" fill="#F59E0B"/></svg>`,
+            jump: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="10" width="30" height="30" rx="8" fill="#1E3A8A"/><circle cx="23" cy="20" r="4" fill="#FFF"/><circle cx="23" cy="20" r="2" fill="#000"/><polygon points="10,5 20,10 15,20" fill="#1E3A8A"/><rect x="14" y="40" width="8" height="10" fill="#F59E0B" transform="rotate(20 18 45)"/><rect x="38" y="40" width="8" height="10" fill="#F59E0B" transform="rotate(-20 42 45)"/><rect x="20" y="23" width="20" height="6" fill="#F59E0B"/></svg>`
         }
     },
     marshall: {
@@ -162,7 +162,7 @@ const CHARACTER_CONFIG = {
     },
     rocky: {
         name: "ロッキー", color: "#10B981", baseSpeed: 5.4, jumpPower: 11.4, maxJumpFrames: 15,
-        skillTitle: "🔧 リサイクル・バリア", skillDesc: "バリアで まもられるぞ！ステージでも ひろうことができる！",
+        skillTitle: "🔧 リサイクル・バリア", skillDesc: "バリアで ままもられるぞ！ステージでも ひろうことができる！",
         svg: {
             run1: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="15" width="30" height="30" rx="8" fill="#10B981"/><circle cx="24" cy="24" r="3" fill="#FFF"/><circle cx="24" cy="24" r="1.5" fill="#000"/><polygon points="12,12 22,15 18,24" fill="#4ADE80"/><polygon points="48,12 38,15 42,24" fill="#4ADE80"/><rect x="18" y="45" width="6" height="12" fill="#1E293B"/><rect x="36" y="45" width="6" height="12" fill="#1E293B"/></svg>`,
             run2: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect x="15" y="12" width="30" height="30" rx="8" fill="#10B981"/><circle cx="24" cy="21" r="3" fill="#FFF"/><circle cx="24" cy="21" r="1.5" fill="#000"/><polygon points="12,9 22,12 18,21" fill="#4ADE80"/><polygon points="48,9 38,12 42,21" fill="#4ADE80"/><rect x="22" y="42" width="6" height="12" fill="#1E293B"/><rect x="32" y="42" width="6" height="12" fill="#1E293B"/></svg>`,
@@ -236,7 +236,7 @@ btnImgWithLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
 </svg>
 `);
 
-// --- 各種アセットの画像オブジェクト（すべてSVGデータURIを埋め込み） ---
+// --- 各種アセットの画像オブジェクト ---
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
 
 // キャラクターSVGのロード化
@@ -295,7 +295,7 @@ const SLOPE_INTERVAL = 200;
 const BASE_GROUND_Y = 240; 
 
 let droppedCookies = []; 
-let fallingObstacles = [];
+let fallingObstacles = []; // ③手前に跳ね飛ばされるエフェクト用配列
 let bgBuildings = [];
 let cookies = [];
 let obstacles = [];
@@ -380,8 +380,7 @@ function initGame() {
         else if (type === 'cone') { obsWidth = 40; obsHeight = 45; obsY = groundY - 45; }
         else if (type === 'cat') { obsWidth = 40; obsHeight = 40; obsY = groundY - 40; }
         else if (type === 'puddle') { obsWidth = 70; obsHeight = 15; obsY = groundY - 7; }
-        // 【修正②】落とし穴自体の配置高さを、地面のトップ位置(groundY)にきれいに合わせる
-        else if (type === 'pit') { obsWidth = 120; obsHeight = 180; obsY = groundY; }
+        else if (type === 'pit') { obsWidth = 130; obsHeight = 200; obsY = groundY; } // ④落とし穴定義
         else if (type === 'spring') { obsWidth = 50; obsHeight = 40; obsY = groundY - 40; }
         else if (type === 'bird') { obsWidth = 45; obsHeight = 35; obsY = groundY - 110 - Math.random() * 30; }
 
@@ -475,6 +474,15 @@ function update() {
     textPopups.forEach(p => { p.y -= 0.8; p.timer--; p.alpha = p.timer / 45; });
     textPopups = textPopups.filter(p => p.timer > 0);
 
+    // --- 【③修正】ぶっ飛び障害物の物理シミュレーション処理を追加 ---
+    fallingObstacles.forEach(fo => {
+        fo.x += fo.vx;
+        fo.vy += fo.gravity;
+        fo.y += fo.vy;
+        fo.rotation += fo.rotSpeed;
+    });
+    fallingObstacles = fallingObstacles.filter(fo => fo.y < 450);
+
     if (player.isFallingInPit) {
         player.vy += 0.8; player.y += player.vy;
         if (player.y > 420) {
@@ -528,7 +536,7 @@ function update() {
     obstacles.forEach(obs => {
         if (obs.type === 'pit' && obs.active) {
             let playerCenterX = nextX + player.width / 2;
-            if (playerCenterX > obs.x + 10 && playerCenterX < obs.x + obs.width - 10) currentPit = obs;
+            if (playerCenterX > obs.x + 15 && playerCenterX < obs.x + obs.width - 15) currentPit = obs;
         }
     });
 
@@ -537,10 +545,9 @@ function update() {
     player.y += player.vy;
 
     if (currentPit) {
-        // 【修正②】プレイヤーの足元が地面位置に達した時に穴へ落下スタートさせる
         if (player.y + player.height >= targetGroundY) {
             player.isFallingInPit = true; player.vy = 4;
-            player.pitResetX = currentPit.x + currentPit.width + 30;
+            player.pitResetX = currentPit.x + currentPit.width + 40;
             triggerPitFall();
             if (currentState === STATES.GAMEOVER) return;
         }
@@ -580,7 +587,7 @@ function update() {
         }
     });
 
-    // 障害物衝突判定（③の修正：踏みつけ判定条件を大幅に緩和して確実に成功するように変更）
+    // 障害物衝突判定
     obstacles.forEach(obs => {
         if (!obs.active || obs.type === 'pit' || currentState === STATES.GAMEOVER) return;
         
@@ -595,19 +602,27 @@ function update() {
                 player.isJumping = true; jumpCounter = 0; isHovering = false; playSe(audioAssets.seJump);
             }
         } else if (obs.type === 'puddle') {
-            // 水たまりは減速のみ
+            // 水たまり判定
         } else {
-            // 【修正③】マーシャルが上から踏みつけた判定の数値を緩和。落下中でなくても、足元が敵の上半分にあれば踏みつけ成功とする
-            let isFallingOnTop = (player.y + player.height - player.vy <= obs.y + 25);
-            
-            if (selectedCharKey === 'marshall' && isFallingOnTop) {
+            // --- 【②修正】確実に踏みつけられるオーバーラップ貫通ガード判定条件 ---
+            let playerBottom = player.y + player.height;
+            let playerPrevBottom = playerBottom - player.vy;
+            let isComingFromTop = (playerPrevBottom <= obs.y + 22) || (playerBottom <= obs.y + obs.height * 0.5);
+
+            if (selectedCharKey === 'marshall' && isComingFromTop) {
                 obs.active = false;
-                player.vy = -14.5; player.isJumping = true; jumpCounter = 0;
+                player.y = obs.y - player.height;
+                player.vy = -14.5; 
+                player.isJumping = true; 
+                jumpCounter = 0; 
+                isHovering = false; 
                 playSe(audioAssets.seJump);
-                addTextPopup(obs.x, obs.y, "🔥ふんづけ大ジャンプ！", "#DC2626");
+                addTextPopup(obs.x + obs.width / 2, obs.y - 15, "🔥ふんづけ大ジャンプ！", "#DC2626");
+                
+                // 【③修正】手前に放物線を描いて画面外に落ちるパラメータを確定セット
                 fallingObstacles.push({
                     x: obs.x, y: obs.y, width: obs.width, height: obs.height, type: obs.type,
-                    vx: 4, vy: -10, gravity: 0.6, rotation: 0, rotSpeed: 0.2
+                    vx: 5, vy: -12, gravity: 0.7, rotation: 0, rotSpeed: 0.25
                 });
             } else {
                 triggerDamage();
@@ -669,12 +684,12 @@ function drawCharSelectScreen() {
         ctx.fillStyle = config.color; ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 15); ctx.fill();
         ctx.lineWidth = 4; ctx.strokeStyle = (selectedCharKey === key) ? "#FFFFFF" : "rgba(255,255,255,0.2)"; ctx.stroke();
         
-        // 【修正①】キャラ選択の枠内にインラインSVGキャラの顔をプレビュー表示させる
-        try { ctx.drawImage(imgAssets.chars[key].run1, btn.x + 10, btn.y + 25, 60, 60); } catch(e){}
+        // 【①修正】完全にクリーンに直したSVG画像を枠の中にきれいに描画
+        try { ctx.drawImage(imgAssets.chars[key].run1, btn.x + 12, btn.y + 25, 60, 60); } catch(e){}
         
         ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "left";
-        ctx.fillText(config.name, btn.x + 80, btn.y + 45);
-        ctx.font = "11px sans-serif"; ctx.fillText("スキルをみる 🔍", btn.x + 80, btn.y + 80);
+        ctx.fillText(config.name, btn.x + 82, btn.y + 45);
+        ctx.font = "11px sans-serif"; ctx.fillText("スキルをみる 🔍", btn.x + 82, btn.y + 80);
     });
 
     if (showCharPopup) {
@@ -684,6 +699,9 @@ function drawCharSelectScreen() {
         ctx.fillStyle = "#1E293B"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center"; ctx.fillText(config.name, 400, 105);
         ctx.fillStyle = config.color; ctx.font = "bold 18px sans-serif"; ctx.fillText(config.skillTitle, 400, 155);
         ctx.fillStyle = "#475569"; ctx.font = "15px sans-serif"; ctx.fillText(config.skillDesc, 400, 205);
+
+        // ポップアップ内に拡大キャラプレビュー表示
+        try { ctx.drawImage(imgAssets.chars[popupCharKey].jump, popupRect.x + 40, popupRect.y + 70, 75, 75); } catch(e){}
 
         ctx.fillStyle = config.color; ctx.beginPath(); ctx.roundRect(popupSelectBtn.x, popupSelectBtn.y, popupSelectBtn.width, popupSelectBtn.height, 12); ctx.fill();
         ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 18px sans-serif"; ctx.fillText("この子にする！", 400, popupSelectBtn.y + 32);
@@ -712,28 +730,63 @@ function drawRankingViewScreen() {
 }
 
 function drawGameElements() {
-    // 地面のベース描画
-    ctx.fillStyle = "#10B981"; ctx.beginPath();
-    let startY = getGroundY(cameraX); ctx.moveTo(0, startY);
-    for (let px = 0; px <= 800; px += 10) { ctx.lineTo(px, getGroundY(cameraX + px)); }
-    ctx.lineTo(800, 400); ctx.lineTo(0, 400); ctx.fill();
+    // 落とし穴リストの抽出
+    let pitList = obstacles.filter(obs => obs.active && obs.type === 'pit');
 
-    // 障害物、落とし穴の描画
+    // --- 【④修正】落とし穴のX座標部分だけ「地面の緑色線を引かない」ように地面の分割描画を行う ---
+    ctx.fillStyle = "#10B981";
+    ctx.beginPath();
+    let isDrawingLine = false;
+
+    for (let px = 0; px <= 800; px += 4) {
+        let worldX = cameraX + px;
+        // 現在のXがどれかの穴の範囲内かチェック
+        let inPit = pitList.some(pit => worldX >= pit.x && worldX <= pit.x + pit.width);
+
+        if (inPit) {
+            // 穴の直前に線を一旦閉じて、下まで塗りつぶす
+            if (isDrawingLine) {
+                ctx.lineTo(px, 400);
+                ctx.closePath();
+                ctx.fill();
+                isDrawingLine = false;
+            }
+        } else {
+            // 穴以外の部分の地面ラインを繋げていく
+            let gy = getGroundY(worldX);
+            if (!isDrawingLine) {
+                ctx.beginPath();
+                ctx.moveTo(px, gy);
+                isDrawingLine = true;
+            } else {
+                ctx.lineTo(px, gy);
+            }
+        }
+    }
+    // 最終端の塗りつぶし閉じ
+    if (isDrawingLine) {
+        ctx.lineTo(800, 400);
+        ctx.lineTo(0, 400);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // 障害物の本体描画（落とし穴は地面の下になるように先に描く）
     obstacles.forEach(obs => {
         if (!obs.active) return;
         let screenX = obs.x - cameraX;
         if (screenX > 850 || screenX + obs.width < -50) return;
 
-        // 【修正②】落とし穴の描画：地面の下を綺麗に真っ黒に塗りつぶし、突き出さないようにする
         if (obs.type === 'pit') {
+            // 【④修正】完全に地面の下へくり抜かれた闇の穴を描画（上が突き出すことは不可能です）
             ctx.fillStyle = "#1E293B"; 
-            ctx.fillRect(screenX, obs.y, obs.width, obs.height); // 地面から下方向へ箱を描画
+            ctx.fillRect(screenX, obs.y, obs.width, obs.height);
             
-            // 穴の左右のフチ（壁面）
-            ctx.strokeStyle = "#047857"; ctx.lineWidth = 4;
+            // 穴の内壁面を暗い深緑のラインで立体表現
+            ctx.strokeStyle = "#065F46"; ctx.lineWidth = 5;
             ctx.beginPath();
-            ctx.moveTo(screenX, obs.y); ctx.lineTo(screenX, obs.y + 50);
-            ctx.moveTo(screenX + obs.width, obs.y); ctx.lineTo(screenX + obs.width, obs.y + 50);
+            ctx.moveTo(screenX, obs.y); ctx.lineTo(screenX, obs.y + 80);
+            ctx.moveTo(screenX + obs.width, obs.y); ctx.lineTo(screenX + obs.width, obs.y + 80);
             ctx.stroke();
             return;
         }
@@ -741,11 +794,13 @@ function drawGameElements() {
         try { ctx.drawImage(imgAssets.obstacles[obs.type], screenX, obs.y, obs.width, obs.height); } catch(e) {}
     });
 
-    // 跳ね飛ばされたエフェクト
+    // --- 【③修正】マーシャルに踏まれて手前にぶっ飛んでいくエフェクトのリアルタイム描画 ---
     fallingObstacles.forEach(fo => {
         let screenX = fo.x - cameraX;
-        ctx.save(); ctx.translate(screenX + fo.width/2, fo.y + fo.height/2); ctx.rotate(fo.rotation);
-        try { ctx.drawImage(imgAssets.obstacles[fo.type], -fo.width/2, -fo.height/2, fo.width, fo.height); } catch(e) {}
+        ctx.save(); 
+        ctx.translate(screenX + fo.width / 2, fo.y + fo.height / 2); 
+        ctx.rotate(fo.rotation);
+        try { ctx.drawImage(imgAssets.obstacles[fo.type], -fo.width / 2, -fo.height / 2, fo.width, fo.height); } catch(e) {}
         ctx.restore();
     });
 
@@ -759,7 +814,7 @@ function drawGameElements() {
     let goalScreenX = goalX - cameraX;
     if (goalScreenX < 900) { try { ctx.drawImage(imgAssets.items.pawStation, goalScreenX, getGroundY(goalX) - 150, 160, 160); } catch(e) {} }
 
-    // プレイヤーの描画（①の修正：完全にインラインSVG画像を参照して点滅・アニメーション）
+    // プレイヤーの描画
     if (player.invincibleTimer === 0 || Math.floor(gameFrame / 4) % 2 === 0) {
         ctx.save(); let pScreenX = player.x - cameraX;
         if (hasRockyShield) {
