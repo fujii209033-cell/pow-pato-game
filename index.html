@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>パウ・パトロール風 横スクロールゲーム</title>
     <style>
-        /* 画面全体のスタイルをスマホ最適化 */
         html, body {
             margin: 0;
             padding: 0;
@@ -18,13 +17,12 @@
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none; /* ダブルタップズームなどを完全に禁止 */
+            touch-action: none;
         }
         
-        /* キャンバスを外枠のコンテナで包み、常にアスペクト比2:1を維持して最大化 */
         #gameContainer {
             width: 100vw;
-            height: 50vw; /* 2:1 の比率 */
+            height: 50vw;
             max-width: 800px;
             max-height: 400px;
             position: relative;
@@ -32,7 +30,6 @@
             background-color: #87CEEB;
         }
 
-        /* 横向きの時は画面いっぱいに広げる */
         @media (orientation: landscape) {
             #gameContainer {
                 width: 100vw;
@@ -61,45 +58,72 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 高解像度ディスプレイ（Retinaなど）およびスマホ画面フィットのための自動スケーリング処理
+// --- 画面解像度・Retina対応の厳密なリサイズ ---
 function resizeCanvasForRetina() {
     const dpr = window.devicePixelRatio || 1;
-    
-    // 現在表示されている実サイズを取得
     const rect = canvas.getBoundingClientRect();
-    
-    // 描画バッファの解像度を決定（ベース解像度は 800x400）
     canvas.width = 800 * dpr;
     canvas.height = 400 * dpr;
-    
-    // 描画コンテキストのスケールをデバイスピクセル比に合わせる
     ctx.scale(dpr, dpr);
 }
-
-// 画面回転やリサイズ時に確実に処理を行う
 window.addEventListener('load', resizeCanvasForRetina);
-window.addEventListener('resize', () => {
-    setTimeout(resizeCanvasForRetina, 200); // 回転時のタイムラグを吸収
-});
+window.addEventListener('resize', () => { setTimeout(resizeCanvasForRetina, 200); });
 resizeCanvasForRetina();
 
-// ページ読み込み時にアドレスバーを隠すためのハック（iOS/Android用）
-window.addEventListener("load", () => {
-    setTimeout(() => { window.scrollTo(0, 1); }, 100);
-});
+// スクロール化け防止
+window.addEventListener("load", () => { setTimeout(() => { window.scrollTo(0, 1); }, 100); });
 
 // --- ゲームの状態 ---
 const STATES = {
     TITLE: 'TITLE',
     CHAR_SELECT: 'CHAR_SELECT',
-    MODE_SELECT: 'MODE_SELECT', 
+    MODE_SELECT: 'MODE_SELECT',
+    STAGE_SELECT: 'STAGE_SELECT', 
     PLAY: 'PLAY',
     PAUSE: 'PAUSE',
     RESULT: 'RESULT',
     GAMEOVER: 'GAMEOVER',       
-    RANKING_VIEW: 'RANKING_VIEW'
+    RANKING_VIEW: 'RANKING_VIEW',
+    BADGE_VIEW: 'BADGE_VIEW'
 };
 let currentState = STATES.TITLE;
+
+// --- ステージの構成定義 ---
+const STAGE_CONFIG = {
+    town: { name: "いつもの街 🌆", bgColor: "#87CEEB", groundColor: "#22C55E", bgType: "building" },
+    beach: { name: "うみのビーチ 🏝️", bgColor: "#00BFFF", groundColor: "#FDE047", bgType: "palm" },
+    snow: { name: "ゆきやま ❄️", bgColor: "#B0C4DE", groundColor: "#FFFFFF", bgType: "pine" }
+};
+let selectedStageKey = 'town';
+
+// --- アチーブメント（パウ・バッジ）の定義 ---
+const BADGE_CONFIG = {
+    first_clear: { id: "first_clear", title: "チェイス バッジ 🎖️", desc: "ゲームを1回クリアした！", unlocked: false },
+    cookie_master: { id: "cookie_master", title: "マーシャル バッジ 🔥", desc: "1回でクッキーを20個集めた！", unlocked: false },
+    total_cookie: { id: "total_cookie", title: "ラブル バッジ 🏗️", desc: "累計クッキー50個達成！", unlocked: false },
+    hard_clear: { id: "hard_clear", title: "スカイ バッジ 🚀", desc: "ライフありモードでクリア！", unlocked: false },
+    ryder_call: { id: "ryder_call", title: "ケント バッジ 📞", desc: "ケントのお助けを呼んだ！", unlocked: false }
+};
+
+let badgeData = { totalCookies: 0, unlocked: {} };
+try {
+    let saved = localStorage.getItem("paw_game_badges");
+    if(saved) {
+        let parsed = JSON.parse(saved);
+        badgeData.totalCookies = parsed.totalCookies || 0;
+        badgeData.unlocked = parsed.unlocked || {};
+        Object.keys(BADGE_CONFIG).forEach(key => {
+            if(badgeData.unlocked[key]) BADGE_CONFIG[key].unlocked = true;
+        });
+    }
+} catch(e){}
+
+function saveBadges() {
+    Object.keys(BADGE_CONFIG).forEach(key => {
+        badgeData.unlocked[key] = BADGE_CONFIG[key].unlocked;
+    });
+    localStorage.setItem("paw_game_badges", JSON.stringify(badgeData));
+}
 
 // --- オーディオアセット ---
 const audioAssets = {
@@ -116,14 +140,8 @@ const audioAssets = {
 };
 
 const UNIFORM_VOLUME = 0.5;
-Object.keys(audioAssets).forEach(key => {
-    audioAssets[key].volume = UNIFORM_VOLUME;
-});
-
-audioAssets.bgmTitle.loop = true;
-audioAssets.bgmPlay.loop = true;
-audioAssets.bgmClear.loop = true;
-audioAssets.bgmGameover.loop = false; 
+Object.keys(audioAssets).forEach(key => { audioAssets[key].volume = UNIFORM_VOLUME; });
+audioAssets.bgmTitle.loop = true; audioAssets.bgmPlay.loop = true; audioAssets.bgmClear.loop = true;
 
 let currentActiveBgm = null; 
 let isAudioInitialized = false; 
@@ -133,85 +151,27 @@ function playBgm(targetAudio) {
     audioAssets.bgmPlay.pause();  audioAssets.bgmPlay.currentTime = 0;
     audioAssets.bgmClear.pause(); audioAssets.bgmClear.currentTime = 0;
     audioAssets.bgmGameover.pause(); audioAssets.bgmGameover.currentTime = 0;
-    
     currentActiveBgm = targetAudio;
-    
     if (document.visibilityState === 'visible' && currentState !== STATES.PAUSE && isAudioInitialized) {
         targetAudio.play().catch(e => {});
     }
 }
+function playSe(targetSe) { if (!isAudioInitialized) return; targetSe.currentTime = 0; targetSe.play().catch(e => {}); }
 
-function playSe(targetSe) {
-    if (!isAudioInitialized) return;
-    targetSe.currentTime = 0;
-    targetSe.play().catch(e => {});
-}
-
-function stopBgmOnHide() {
-    if (currentActiveBgm) currentActiveBgm.pause();
-}
-function resumeBgmOnShow() {
-    if (currentActiveBgm && document.visibilityState === 'visible' && currentState !== STATES.PAUSE && isAudioInitialized) {
-        currentActiveBgm.play().catch(e => {});
-    }
-}
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === 'hidden') stopBgmOnHide();
-    else resumeBgmOnShow();
-});
-window.addEventListener("pagehide", stopBgmOnHide);
-window.addEventListener("pageshow", resumeBgmOnShow);
-
-// --- キャラクターの定数定義 ---
+// --- キャラクター固有パラメータとアセット定義 ---
 const CHARACTER_CONFIG = {
-    chase: {
-        name: "チェイス", color: "#1E3A8A",
-        baseSpeed: 6.8, jumpPower: 11.2, maxJumpFrames: 14,
-        skillTitle: "⚡ パウ・ダッシュ",
-        skillDesc: "はしるスピードが いちばん はやいぞ！",
-        images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" }
-    },
-    marshall: {
-        name: "マーシャル", color: "#DC2626",
-        baseSpeed: 5.3, jumpPower: 11.6, maxJumpFrames: 15,
-        skillTitle: "🔥 ファイヤー・ジャンプ",
-        skillDesc: "しょうがいぶつや ジャンプだいをおすと ウルトラ大ジャンプ！",
-        images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" }
-    },
-    rubble: {
-        name: "ラブル", color: "#EAB308",
-        baseSpeed: 5.0, jumpPower: 12.0, maxJumpFrames: 17,
-        skillTitle: "🏗️ パワー・リカバリー",
-        skillDesc: "あなに おちても 3かいまで ド根性でふっかつするぞ！",
-        images: { run1: "images/rubble_run1.png", run2: "images/rubble_run2.png", jump: "images/rubble_jump.png" }
-    },
-    skye: {
-        name: "スカイ", color: "#EC4899",
-        baseSpeed: 5.8, jumpPower: 11.8, maxJumpFrames: 15,
-        skillTitle: "🚀 フライング・ホバー",
-        skillDesc: "ジャンプちゅうに もういちどおすと おおぞらを飛べる！",
-        images: { run1: "images/skye_run1.png", run2: "images/skye_run2.png", jump: "images/skye_jump.png" }
-    },
-    rocky: {
-        name: "ロッキー", color: "#10B981",
-        baseSpeed: 5.4, jumpPower: 11.4, maxJumpFrames: 15,
-        skillTitle: "🔧 リサイクル・バリア",
-        skillDesc: "バリアで ままもられるぞ！ステージでも ひろうことができる！",
-        images: { run1: "images/rocky_run1.png", run2: "images/rocky_run2.png", jump: "images/rocky_jump.png" }
-    },
-    zuma: {
-        name: "ズーマ", color: "#F97316",
-        baseSpeed: 5.6, jumpPower: 11.4, maxJumpFrames: 15,
-        skillTitle: "🌊 ホバーダッシュ",
-        skillDesc: "みずたまりに はいると チャージされて ずっとダッシュ！",
-        images: { run1: "images/zuma_run1.png", run2: "images/zuma_run2.png", jump: "images/zuma_jump.png" }
-    }
+    chase: { name: "チェイス", color: "#1E3A8A", baseSpeed: 6.8, jumpPower: 11.2, maxJumpFrames: 14, skillTitle: "⚡ パウ・ダッシュ", skillDesc: "はしるスピードが いちばん はやいぞ！", images: { run1: "images/chase_run1.png", run2: "images/chase_run2.png", jump: "images/chase_jump.png" } },
+    marshall: { name: "マーシャル", color: "#DC2626", baseSpeed: 5.3, jumpPower: 11.6, maxJumpFrames: 15, skillTitle: "🔥 ファイヤー・ジャンプ", skillDesc: "しょうがいぶつや ジャンプだいをおすと ウルトラ大ジャンプ！", images: { run1: "images/marshall_run1.png", run2: "images/marshall_run2.png", jump: "images/marshall_jump.png" } },
+    rubble: { name: "ラブル", color: "#EAB308", baseSpeed: 5.0, jumpPower: 12.0, maxJumpFrames: 17, skillTitle: "🏗️ パワー・リカバリー", skillDesc: "あなに おちても 3かいまで ド根性でふっかつするぞ！", images: { run1: "images/rubble_run1.png", run2: "images/rubble_run2.png", jump: "images/rubble_jump.png" } },
+    skye: { name: "スカイ", color: "#EC4899", baseSpeed: 5.8, jumpPower: 11.8, maxJumpFrames: 15, skillTitle: "🚀 フライング・ホバー", skillDesc: "ジャンプちゅうに もういちどおすと おおぞらを飛べる！", images: { run1: "images/skye_run1.png", run2: "images/skye_run2.png", jump: "images/skye_jump.png" } },
+    rocky: { name: "ロッキー", color: "#10B981", baseSpeed: 5.4, jumpPower: 11.4, maxJumpFrames: 15, skillTitle: "🔧 リサイクル・バリア", skillDesc: "バリアで ままもられるぞ！ステージでも ひろうことができる！", images: { run1: "images/rocky_run1.png", run2: "images/rocky_run2.png", jump: "images/rocky_jump.png" } },
+    zuma: { name: "ズーマ", color: "#F97316", baseSpeed: 5.6, jumpPower: 11.4, maxJumpFrames: 15, skillTitle: "🌊 ホバーダッシュ", skillDesc: "みずたまりに はいると チャージされて ずっとダッシュ！", images: { run1: "images/zuma_run1.png", run2: "images/zuma_run2.png", jump: "images/zuma_jump.png" } }
 };
 
 let selectedCharKey = 'chase'; 
 let isLifeMode = true; 
 
-// --- ポップアップ管理変数 ---
+// ポップアップ周り
 let showCharPopup = false;
 let popupCharKey = 'chase';
 const popupRect = { x: 150, y: 50, width: 500, height: 300 };
@@ -221,22 +181,24 @@ const popupSelectBtn = { x: 300, y: 285, width: 200, height: 50 };
 let isInputPressing = false;
 let jumpCounter = 0; 
 
-// 各キャラ固有スキル用変数
+// スキルステート
 let isHovering = false;
 let hoverTimer = 0;
 let hasRockyShield = false;
 let rubbleRecoveryCount = 0;
 let isZumaDashing = false;
-
-// ダッシュボード用の管理変数
 let dashPanelTimer = 0;
 
-// --- ボタンの配置定義 ---
+// ケントのお助けモード（パウパック磁力）
+let ryderItem = { x: -1000, y: 0, width: 44, height: 44, active: false };
+let ryderActiveTimer = 0;
+
+// --- 固定UIボタン配置位置 ---
 const pauseButton = { x: 730, y: 15, width: 50, height: 50 };
 const rankingButton = { x: 30, y: 330, width: 160, height: 45 };
-const rankingBackButton = { x: 320, y: 320, width: 160, height: 50 };
+const badgeButton = { x: 210, y: 330, width: 160, height: 45 };
+const uiBackButton = { x: 320, y: 330, width: 160, height: 45 };
 
-// キャラクター選択ボタン（2段構成）
 const charButtons = {
     chase:    { x: 50,  y: 110, width: 210, height: 110 },
     marshall: { x: 295, y: 110, width: 210, height: 110 },
@@ -246,32 +208,27 @@ const charButtons = {
     zuma:     { x: 540, y: 245, width: 210, height: 110 }
 };
 
-// モード選択ボタン
 const modeButtons = {
     noLife: { x: 65, y: 160, width: 310, height: 140 },
     withLife: { x: 425, y: 160, width: 310, height: 140 }
 };
 
-// モード選択画面のSVGボタン
+const stageButtons = {
+    town: { x: 60, y: 160, width: 200, height: 130, color: "#1E90FF" },
+    beach: { x: 300, y: 160, width: 200, height: 130, color: "#FFA500" },
+    snow: { x: 540, y: 160, width: 200, height: 130, color: "#778899" }
+};
+
+// --- 特殊SVG/インラインベクターグラフィック ---
 const btnImgNoLife = new Image();
-btnImgNoLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="310" height="140" viewBox="0 0 310 140">
-    <rect x="0" y="0" width="310" height="140" rx="20" fill="#10B981" />
-    <text x="155" y="58" font-family="sans-serif" font-weight="bold" font-size="22" fill="#FFFFFF" text-anchor="middle">💚 ライフなし</text>
-    <text x="155" y="98" font-family="sans-serif" font-weight="bold" font-size="15" fill="#FFFFFF" text-anchor="middle">(ぶつかっても ずっと走れるよ)</text>
-</svg>
-`);
+btnImgNoLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="310" height="140"><rect width="310" height="140" rx="20" fill="#10B981" /><text x="155" y="58" font-family="sans-serif" font-weight="bold" font-size="22" fill="#FFFFFF" text-anchor="middle">💚 ライフなし</text><text x="155" y="98" font-family="sans-serif" font-weight="bold" font-size="15" fill="#FFFFFF" text-anchor="middle">(ぶつかっても ずっと走れるよ)</text></svg>`);
 
 const btnImgWithLife = new Image();
-btnImgWithLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="310" height="140" viewBox="0 0 310 140">
-    <rect x="0" y="0" width="310" height="140" rx="20" fill="#EF4444" />
-    <text x="155" y="58" font-family="sans-serif" font-weight="bold" font-size="22" fill="#FFFFFF" text-anchor="middle">❤️ ライフあり (5つ)</text>
-    <text x="155" y="98" font-family="sans-serif" font-weight="bold" font-size="15" fill="#FFFFFF" text-anchor="middle">(5回ぶつかると ゲームオーバー)</text>
-</svg>
-`);
+btnImgWithLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="310" height="140"><rect width="310" height="140" rx="20" fill="#EF4444" /><text x="155" y="58" font-family="sans-serif" font-weight="bold" font-size="22" fill="#FFFFFF" text-anchor="middle">❤️ ライフあり (5つ)</text><text x="155" y="98" font-family="sans-serif" font-weight="bold" font-size="15" fill="#FFFFFF" text-anchor="middle">(5回ぶつかると ゲームオーバー)</text></svg>`);
 
-// --- 画像アセット ---
+const imgRyderPad = new Image();
+imgRyderPad.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect x="4" y="4" width="36" height="36" rx="9" fill="#EF4444" stroke="#FFFFFF" stroke-width="2"/><circle cx="22" cy="22" r="11" fill="#3B82F6"/><path d="M17,22 L27,22 M22,17 L22,27" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/><rect x="19" y="34" width="6" height="3" fill="#FFFFFF"/></svg>`);
+
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
 Object.keys(CHARACTER_CONFIG).forEach(charKey => {
     imgAssets.chars[charKey] = {};
@@ -280,1067 +237,632 @@ Object.keys(CHARACTER_CONFIG).forEach(charKey => {
         imgAssets.chars[charKey][imgKey].src = CHARACTER_CONFIG[charKey].images[imgKey];
     });
 });
-imgAssets.items.cookie = new Image();
-imgAssets.items.cookie.src = "images/cookie.png";
-imgAssets.items.bone = new Image();            
-imgAssets.items.bone.src = "images/bone.png";
-imgAssets.items.pawStation = new Image();
-imgAssets.items.pawStation.src = "images/paw_station.png";
-imgAssets.items.rockyShield = new Image();
-imgAssets.items.rockyShield.src = "images/rocky_shield.png";
+
+imgAssets.items.cookie = new Image(); imgAssets.items.cookie.src = "images/cookie.png";
+imgAssets.items.bone = new Image(); imgAssets.items.bone.src = "images/bone.png";
+imgAssets.items.pawStation = new Image(); imgAssets.items.pawStation.src = "images/paw_station.png";
+imgAssets.items.rockyShield = new Image(); imgAssets.items.rockyShield.src = "images/rocky_shield.png";
 
 imgAssets.items.spring = new Image();
-imgAssets.items.spring.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="50" height="40" viewBox="0 0 50 40">
-    <rect x="2" y="32" width="46" height="8" rx="2" fill="#475569" />
-    <path d="M10,32 L18,20 L32,20 L40,32" stroke="#94A3B8" stroke-width="4" fill="none" stroke-linejoin="round"/>
-    <path d="M12,20 L20,8 L30,8 L38,20" stroke="#CBD5E1" stroke-width="4" fill="none" stroke-linejoin="round"/>
-    <rect x="0" y="0" width="50" height="8" rx="3" fill="#EF4444" />
-    <line x1="10" y1="4" x2="20" y2="4" stroke="#FFFFFF" stroke-width="2"/>
-    <line x1="30" y1="4" x2="40" y2="4" stroke="#FFFFFF" stroke-width="2"/>
-</svg>
-`);
+imgAssets.items.spring.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="50" height="40"><rect x="2" y="32" width="46" height="8" rx="2" fill="#475569" /><path d="M10,32 L18,20 L32,20 L40,32M12,20 L20,8 L30,8 L38,20" stroke="#94A3B8" stroke-width="4" fill="none"/><rect width="50" height="8" rx="3" fill="#EF4444" /></svg>`);
 
 imgAssets.items.dashPanel = new Image();
-imgAssets.items.dashPanel.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="60" height="15" viewBox="0 0 60 15">
-    <polygon points="0,15 15,0 45,0 60,15" fill="#3B82F6" />
-    <polygon points="15,12 25,3 25,12" fill="#FDE047" />
-    <polygon points="30,12 40,3 40,12" fill="#FDE047" />
-</svg>
-`);
+imgAssets.items.dashPanel.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="60" height="15"><polygon points="0,15 15,0 45,0 60,15" fill="#3B82F6" /><polygon points="15,12 25,3 25,12M30,12 40,3 40,12" fill="#FDE047" /></svg>`);
 
 imgAssets.obstacles.bird = new Image();
-imgAssets.obstacles.bird.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" viewBox="0 0 40 30">
-    <path d="M10,15 Q20,0 30,15 Q20,20 10,15 Z" fill="#475569" />
-    <path d="M10,15 Q0,5 5,0 Q10,5 12,12" fill="#64748B" />
-    <path d="M30,15 Q40,5 35,0 Q30,5 28,12" fill="#64748B" />
-    <polygon points="22,12 28,15 22,18" fill="#F59E0B" />
-</svg>
-`);
+imgAssets.obstacles.bird.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><path d="M10,15 Q20,0 30,15 Q20,20 10,15 Z" fill="#475569" /><path d="M10,15 Q0,5 5,0 Q10,5 12,12M30,15 Q40,5 35,0 Q30,5 28,12" fill="#64748B" /><polygon points="22,12 28,15 22,18" fill="#F59E0B" /></svg>`);
 
 const obstacleImages = { car: "images/car.png", moving_car: "images/car.png", box: "images/box.png", cone: "images/cone.png", cat: "images/cat.png", puddle: "images/puddle.png" };
 Object.keys(obstacleImages).forEach(key => {
-    imgAssets.obstacles[key] = new Image();
-    imgAssets.obstacles[key].src = obstacleImages[key];
+    imgAssets.obstacles[key] = new Image(); imgAssets.obstacles[key].src = obstacleImages[key];
 });
 
 // --- ゲーム変数 ---
-let gameFrame = 0; 
-let score = 0;
-let lives = 5; 
-
+let gameFrame = 0; let score = 0; let lives = 5; 
 let ranking = [15, 10, 5];
-if (localStorage.getItem("paw_game_ranking")) {
-    try { ranking = JSON.parse(localStorage.getItem("paw_game_ranking")); } catch(e) { ranking = [15, 10, 5]; }
-} else {
-    localStorage.setItem("paw_game_ranking", JSON.stringify(ranking));
-}
+try { if(localStorage.getItem("paw_game_ranking")) ranking = JSON.parse(localStorage.getItem("paw_game_ranking")); } catch(e){}
 
-let player = {
-    x: 100, y: 240, width: 60, height: 60, vy: 0, 
-    gravity: 0.85, isJumping: false, invincibleTimer: 0, speedModifier: 1.0, isFallingInPit: false 
-};
-
+let player = { x: 100, y: 240, width: 60, height: 60, vy: 0, gravity: 0.85, isJumping: false, invincibleTimer: 0, speedModifier: 1.0, isFallingInPit: false, pitResetX: 0 };
 let slopePoints = [];
-const SLOPE_INTERVAL = 200;
-const BASE_GROUND_Y = 240; 
+const SLOPE_INTERVAL = 200; const BASE_GROUND_Y = 240; 
 
-let droppedCookies = []; 
-let fallingObstacles = []; 
-let bgBuildings = [];
-let cookies = [];
-let obstacles = [];
-let bones = []; 
-let shieldItems = []; 
-let dashPanels = []; 
-let textPopups = []; 
-let confettiParticles = []; 
-let goalX = 15000; 
-let cameraX = 0;
+let droppedCookies = []; let fallingObstacles = []; let bgElements = []; let cookies = []; let obstacles = []; let bones = []; let shieldItems = []; let dashPanels = []; let textPopups = []; let confettiParticles = []; 
+let goalX = 15000; let cameraX = 0;
 
+// --- 地形・傾斜の計算ロジック ---
 function getGroundY(x) {
     if (x < 0 || x >= goalX - 400) return BASE_GROUND_Y;
     let index = Math.floor(x / SLOPE_INTERVAL);
     if (index >= slopePoints.length - 1) return BASE_GROUND_Y;
-    let p1 = slopePoints[index];
-    let p2 = slopePoints[index + 1];
-    let ratio = (x % SLOPE_INTERVAL) / SLOPE_INTERVAL;
-    return p1 + (p2 - p1) * ratio;
+    let p1 = slopePoints[index]; let p2 = slopePoints[index + 1];
+    return p1 + (p2 - p1) * ((x % SLOPE_INTERVAL) / SLOPE_INTERVAL);
 }
 
 function addTextPopup(x, y, text, color = "#FFF") {
-    textPopups.push({
-        x: x, y: y, text: text, color: color, alpha: 1.0, timer: 45
-    });
+    textPopups.push({ x: x, y: y, text: text, color: color, alpha: 1.0, timer: 60 });
 }
 
 function createConfetti() {
-    const colors = ["#FF2A6D", "#05D9E8", "#01012B", "#F5A623", "#7ED321", "#B8E986", "#F8E71C"];
+    const colors = ["#FF2A6D", "#05D9E8", "#F5A623", "#7ED321", "#F8E71C"];
     for (let i = 0; i < 150; i++) {
-        confettiParticles.push({
-            x: Math.random() * 800,
-            y: Math.random() * -400,
-            size: Math.random() * 8 + 5,
-            color: colors[Math.floor(Math.random() * colors.length)],
-            vx: (Math.random() - 0.5) * 4,
-            vy: Math.random() * 3 + 2,
-            rotation: Math.random() * Math.PI,
-            rotSpeed: (Math.random() - 0.5) * 0.1
-        });
+        confettiParticles.push({ x: Math.random() * 800, y: Math.random() * -400, size: Math.random() * 8 + 5, color: colors[Math.floor(Math.random() * colors.length)], vx: (Math.random() - 0.5) * 4, vy: Math.random() * 3 + 2, rotation: Math.random() * Math.PI, rotSpeed: (Math.random() - 0.5) * 0.1 });
     }
 }
 
+// --- 厳密なゲーム初期化・リセットロジック ---
 function initGame() {
-    score = 0;
-    lives = 5; 
-    cameraX = 0;
-    player.x = 100;
-    player.vy = 0;
-    player.isJumping = false;
-    player.invincibleTimer = 0;
-    player.speedModifier = 1.0;
-    player.isFallingInPit = false;
-    droppedCookies = [];
-    fallingObstacles = [];
-    textPopups = [];
-    confettiParticles = [];
-    dashPanelTimer = 0;
-    jumpCounter = 0;
+    gameFrame = 0; score = 0; lives = 5; cameraX = 0;
+    player.x = 100; player.vy = 0; player.isJumping = false; player.invincibleTimer = 0; player.speedModifier = 1.0; player.isFallingInPit = false;
+    droppedCookies = []; fallingObstacles = []; textPopups = []; confettiParticles = []; dashPanelTimer = 0; jumpCounter = 0;
+    isHovering = false; hoverTimer = 0; hasRockyShield = (selectedCharKey === 'rocky'); rubbleRecoveryCount = 0; isZumaDashing = false;
+    ryderActiveTimer = 0;
 
-    isHovering = false;
-    hoverTimer = 0;
-    hasRockyShield = (selectedCharKey === 'rocky');
-    rubbleRecoveryCount = 0;
-    isZumaDashing = false;
-
+    // 1. 地形起伏生成
     slopePoints = [];
     let numPoints = Math.ceil(goalX / SLOPE_INTERVAL) + 5;
     let lastY = BASE_GROUND_Y;
     for (let i = 0; i < numPoints; i++) {
-        if (i < 3 || i > numPoints - 6) {
-            slopePoints.push(BASE_GROUND_Y);
-        } else {
-            let change = (Math.random() - 0.5) * 50;
+        if (i < 3 || i > numPoints - 6) slopePoints.push(BASE_GROUND_Y);
+        else {
+            let change = (Math.random() - 0.5) * 40;
             let currentY = lastY + change;
-            if (currentY < 180) currentY = 180;
-            if (currentY > 270) currentY = 270;
-            slopePoints.push(currentY);
-            lastY = currentY;
+            slopePoints.push(Math.max(190, Math.min(currentY, 260)));
+            lastY = slopePoints[slopePoints.length - 1];
         }
     }
     player.y = getGroundY(player.x);
 
-    bgBuildings = [];
-    const colors = ["#FCA5A5", "#FECABC", "#FEF08A", "#BBF7D0", "#BFDBFE", "#E9D5FF", "#FBCFE8", "#FDE047", "#A7F3D0", "#93C5FD"];
-    const roofTypes = ['flat', 'triangle', 'dome'];
-    for (let i = 0; i < 75; i++) {
-        bgBuildings.push({
-            x: i * 220 + Math.random() * 60,
-            width: 100 + Math.random() * 90,
-            height: 120 + Math.random() * 140,
+    // 2. 背景装飾生成
+    bgElements = [];
+    const colors = ["#FCA5A5", "#FECABC", "#FEF08A", "#BBF7D0", "#BFDBFE", "#E9D5FF"];
+    for (let i = 0; i < 60; i++) {
+        bgElements.push({
+            x: i * 250 + Math.random() * 80,
+            width: 70 + Math.random() * 80,
+            height: 100 + Math.random() * 120,
             color: colors[Math.floor(Math.random() * colors.length)],
-            roof: roofTypes[Math.floor(Math.random() * roofTypes.length)]
+            randVal: Math.random()
         });
     }
+
+    // 3. 障害物の配置
+    const types = ['car', 'moving_car', 'box', 'cone', 'cat', 'puddle', 'pit', 'spring'];
+    if (isLifeMode) types.push('bird');
 
     obstacles = [];
-    // 【修正点①】「ライフあり（むずかしい）」の時だけ「鳥 (bird)」を抽選候補に含める
-    const types = ['car', 'moving_car', 'box', 'cone', 'cat', 'puddle', 'pit', 'spring'];
-    if (isLifeMode) {
-        types.push('bird'); // むずかしいモードのみ鳥を追加
-    }
-
-    for (let i = 0; i < 42; i++) {
+    for (let i = 0; i < 40; i++) {
         let type = types[Math.floor(Math.random() * types.length)];
-        let ox = 600 + i * 350 + Math.random() * 60;
+        let ox = 700 + i * 360 + Math.random() * 50;
+        if (type === 'moving_car' && ox < goalX / 2) type = 'car';
 
-        if (type === 'moving_car' && ox < goalX / 2) {
-            type = 'car';
-        }
+        let w = 50, h = 50, gy = getGroundY(ox), oy = gy;
 
-        let obsWidth = 50; let obsHeight = 50;
-        let groundY = getGroundY(ox);
-        let obsY = groundY;
+        if (type === 'car' || type === 'moving_car') { w = 70; h = 45; oy = gy + 15; }
+        else if (type === 'box') { w = 45; h = 45; oy = gy + 15; }
+        else if (type === 'cone') { w = 35; h = 40; oy = gy + 20; }
+        else if (type === 'cat') { w = 45; h = 45; oy = gy + 15; }
+        else if (type === 'puddle') { w = 70; h = 15; oy = gy + 45; }
+        else if (type === 'pit') { w = 130; h = 160; oy = gy + 60; }
+        else if (type === 'spring') { w = 50; h = 40; oy = gy + 20; }
+        else if (type === 'bird') { w = 45; h = 35; oy = gy - 70 - Math.random() * 40; }
 
-        if (type === 'car' || type === 'moving_car') { obsWidth = 70; obsHeight = 45; obsY = groundY + 15; }
-        else if (type === 'box') { obsWidth = 50; obsHeight = 50; obsY = groundY + 10; }
-        else if (type === 'cone') { obsWidth = 40; obsHeight = 45; obsY = groundY + 15; }
-        else if (type === 'cat') { obsWidth = 50; obsHeight = 50; obsY = groundY + 10; }
-        else if (type === 'puddle') { obsWidth = 70; obsHeight = 15; obsY = groundY + 45; }
-        else if (type === 'pit') { obsWidth = 140; obsHeight = 160; obsY = groundY + 60; }
-        else if (type === 'spring') { obsWidth = 50; obsHeight = 40; obsY = groundY + 20; }
-        else if (type === 'bird') { 
-            obsWidth = 45; obsHeight = 35; obsY = groundY - 80 - Math.random() * 40; 
-        }
-
-        obstacles.push({ 
-            x: ox, y: obsY, width: obsWidth, height: obsHeight, 
-            type: type, active: true, vx: 0, isRunning: false 
-        });
+        obstacles.push({ x: ox, y: oy, width: w, height: h, type: type, active: true, vx: 0, isRunning: false });
     }
 
+    // 4. ダッシュパネルの配置
     dashPanels = [];
     for (let i = 1; i < 20; i++) {
-        let px = i * 750 + Math.random() * 100;
-        let nearObs = obstacles.find(obs => Math.abs(obs.x - px) < 100);
-        if (!nearObs) {
-            let gy = getGroundY(px);
-            dashPanels.push({ x: px, y: gy + 45, width: 60, height: 15 });
+        let px = i * 780 + Math.random() * 80;
+        if (!obstacles.find(obs => Math.abs(obs.x - px) < 100)) {
+            dashPanels.push({ x: px, y: getGroundY(px) + 45, width: 60, height: 15 });
         }
     }
 
-    cookies = [];
-    bones = []; 
-    shieldItems = []; 
-    let currentX = 400;
+    // 5. 【新規】ケントのお助け通信機（中盤に確実に出現）
+    ryderItem = { x: goalX * 0.45 + Math.random() * 300, y: BASE_GROUND_Y - 60, width: 44, height: 44, active: true };
+
+    // 6. アイテム（クッキー、ホネ、バリア）の配置
+    cookies = []; bones = []; shieldItems = [];
+    let currentX = 450;
     while (currentX < goalX - 500) {
-        currentX += 80 + Math.random() * 140; 
-        let nearObs = obstacles.find(obs => Math.abs(obs.x - currentX) < 180);
-        let numGroup = Math.floor(Math.random() * 2) + 3; 
-        let groupHeightType = Math.random();
-
+        currentX += 90 + Math.random() * 120;
+        let nearObs = obstacles.find(obs => Math.abs(obs.x - currentX) < 150);
+        let numGroup = Math.floor(Math.random() * 2) + 3;
         let randItem = Math.random();
-        let spawnBone = isLifeMode && (randItem < 0.05);
-        
-        let spawnShield = false;
-        if (!spawnBone && selectedCharKey === 'rocky') {
-            if (randItem >= 0.05 && randItem < 0.08) {
-                spawnShield = true;
-            }
-        }
 
-        if (spawnBone) {
-            let bx = currentX;
-            let groundY = getGroundY(bx);
-            let by = groundY - 50;
-            bones.push({ x: bx, y: by, width: 35, height: 35, collected: false });
-            currentX += 100;
-            continue;
+        if (isLifeMode && randItem < 0.05) {
+            bones.push({ x: currentX, y: getGroundY(currentX) - 50, width: 35, height: 35, collected: false });
+            currentX += 100; continue;
         }
-
-        if (spawnShield) {
-            let sx = currentX;
-            let groundY = getGroundY(sx);
-            let sy = groundY - 50;
-            shieldItems.push({ x: sx, y: sy, width: 40, height: 40, collected: false });
-            currentX += 100;
-            continue;
+        if (selectedCharKey === 'rocky' && randItem >= 0.05 && randItem < 0.09) {
+            shieldItems.push({ x: currentX, y: getGroundY(currentX) - 50, width: 40, height: 40, collected: false });
+            currentX += 100; continue;
         }
 
         for (let j = 0; j < numGroup; j++) {
-            let cx = currentX + j * 42;
-            let groundY = getGroundY(cx);
-            let cy = groundY - 45; 
+            let cx = currentX + j * 40;
+            let gy = getGroundY(cx);
+            let cy = gy - 45;
 
             if (nearObs) {
-                if (nearObs.type === 'puddle') cy = groundY - 95;
-                else if (nearObs.type === 'pit') cy = groundY - 90;
-                else if (nearObs.type === 'spring') cy = groundY - 120; 
-                else if (nearObs.type === 'car' || nearObs.type === 'moving_car' || nearObs.type === 'box' || nearObs.type === 'cone' || nearObs.type === 'bird') {
-                    if (groupHeightType < 0.5) cy = groundY - 155; else cy = groundY - 95;  
-                }
-            } else {
-                if (groupHeightType < 0.4) cy = groundY - 85; 
+                if (nearObs.type === 'puddle' || nearObs.type === 'pit') cy = gy - 90;
+                else if (nearObs.type === 'spring') cy = gy - 120;
+                else cy = gy - 140;
             }
-
             if (cy < 350) cookies.push({ x: cx, y: cy, width: 30, height: 30, collected: false });
         }
-        currentX += numGroup * 42;
+        currentX += numGroup * 40;
     }
 }
 
 function triggerDamage() {
     if (player.invincibleTimer > 0) return; 
-
     if (hasRockyShield) {
-        hasRockyShield = false;
-        player.invincibleTimer = 60;
-        playSe(audioAssets.seHeal);
-        addTextPopup(player.x + 30, player.y - 10, "バリアをうしなった！", "#EF4444");
-        return;
+        hasRockyShield = false; player.invincibleTimer = 60; playSe(audioAssets.seHeal);
+        addTextPopup(player.x + 30, player.y - 10, "バリアがきえた！", "#EF4444"); return;
     }
-
-    playSe(audioAssets.seDamage);
-    addTextPopup(player.x + 30, player.y - 10, "イタッ！", "#EF4444");
-    
-    if (isLifeMode) {
-        lives--;
-        if (lives <= 0) { lives = 0; triggerGameOver(); return; }
-    }
-
-    if (score > 0) {
-        score--; 
-        droppedCookies.push({
-            x: player.x + player.width / 2, y: player.y + player.height / 2,
-            vx: -2 - Math.random() * 3, vy: -7 - Math.random() * 3, 
-            gravity: 0.5, rotation: 0, rotSpeed: (Math.random() - 0.5) * 0.2
-        });
-    }
+    playSe(audioAssets.seDamage); addTextPopup(player.x + 30, player.y - 10, "イタッ！", "#EF4444");
+    if (isLifeMode) { lives--; if (lives <= 0) { lives = 0; triggerGameOver(); return; } }
+    if (score > 0) { score--; droppedCookies.push({ x: player.x + 30, y: player.y + 30, vx: -3, vy: -8, gravity: 0.5, rotation: 0, rotSpeed: 0.1 }); }
     player.invincibleTimer = 120; 
 }
 
 function triggerPitFall() {
     if (selectedCharKey === 'rubble' && rubbleRecoveryCount < 3) {
-        rubbleRecoveryCount++;
-        player.isFallingInPit = false;
-        player.vy = -14; 
-        player.isJumping = true;
-        jumpCounter = 0;
-        playSe(audioAssets.seJump);
-        addTextPopup(player.x + 30, player.y - 10, "ド根性ふっかつ！", "#EAB308");
-        return;
+        rubbleRecoveryCount++; player.isFallingInPit = false; player.vy = -14; player.isJumping = true; jumpCounter = 0;
+        playSe(audioAssets.seJump); addTextPopup(player.x + 30, player.y - 10, "ド根性ふっかつ！", "#EAB308"); return;
     }
-
-    playSe(audioAssets.sePit);
-    addTextPopup(player.x + 30, player.y - 10, "あなにおちた！", "#EF4444");
-
-    if (isLifeMode) {
-        lives--;
-        if (lives <= 0) { lives = 0; triggerGameOver(); return; }
-    }
-
-    if (player.invincibleTimer === 0 && score > 0) {
-        score--;
-        droppedCookies.push({
-            x: player.x + player.width / 2, y: player.y + player.height / 2,
-            vx: -2 - Math.random() * 3, vy: -7 - Math.random() * 3, 
-            gravity: 0.5, rotation: 0, rotSpeed: (Math.random() - 0.5) * 0.2
-        });
-    }
+    playSe(audioAssets.sePit); addTextPopup(player.x + 30, player.y - 10, "あなに落ちた！", "#EF4444");
+    if (isLifeMode) { lives--; if (lives <= 0) { lives = 0; triggerGameOver(); return; } }
+    if (player.invincibleTimer === 0 && score > 0) { score--; droppedCookies.push({ x: player.x + 30, y: player.y + 30, vx: -3, vy: -8, gravity: 0.5, rotation: 0, rotSpeed: 0.1 }); }
     player.invincibleTimer = 120;
 }
 
+// --- メインアップデート（物理・状態管理） ---
 function update() {
     if (currentState === STATES.PAUSE || currentState === STATES.GAMEOVER) return;
-
     gameFrame++;
 
     if (currentState === STATES.RESULT) {
-        confettiParticles.forEach(p => {
-            p.x += p.vx; p.y += p.vy; p.rotation += p.rotSpeed;
-            if (p.y > 400) { p.y = -20; p.x = Math.random() * 800; }
-        });
+        confettiParticles.forEach(p => { p.x += p.vx; p.y += p.vy; if (p.y > 400) { p.y = -20; p.x = Math.random() * 800; } });
         return;
     }
-
     if (currentState !== STATES.PLAY) return;
 
     const charConfig = CHARACTER_CONFIG[selectedCharKey];
     if (player.invincibleTimer > 0) player.invincibleTimer--;
 
-    textPopups.forEach(p => { p.y -= 0.8; p.timer--; p.alpha = p.timer / 45; });
+    // ポップアップ・エフェクト更新
+    textPopups.forEach(p => { p.y -= 0.8; p.timer--; p.alpha = p.timer / 60; });
     textPopups = textPopups.filter(p => p.timer > 0);
-
-    droppedCookies.forEach(dc => { dc.vy += dc.gravity; dc.x += dc.vx; dc.y += dc.vy; dc.rotation += dc.rotSpeed; });
+    droppedCookies.forEach(dc => { dc.vy += dc.gravity; dc.x += dc.vx; dc.y += dc.vy; });
     droppedCookies = droppedCookies.filter(dc => dc.y < 450);
-
     fallingObstacles.forEach(fo => { fo.vy += fo.gravity; fo.x += fo.vx; fo.y += fo.vy; fo.rotation += fo.rotSpeed; });
     fallingObstacles = fallingObstacles.filter(fo => fo.y < 450);
 
+    // 穴落下中処理
     if (player.isFallingInPit) {
         player.vy += 0.8; player.y += player.vy;
-        if (player.y > 420) {
-            player.isFallingInPit = false;
-            player.x = player.pitResetX; 
-            player.y = getGroundY(player.x);
-            player.vy = 0; player.isJumping = false;
-        }
-        cameraX = player.x - 100;
-        return; 
+        if (player.y > 420) { player.isFallingInPit = false; player.x = player.pitResetX; player.y = getGroundY(player.x); player.vy = 0; player.isJumping = false; }
+        cameraX = player.x - 100; return; 
     }
 
+    // スピードモディファイア決定
     player.speedModifier = 1.0; 
+    if (dashPanelTimer > 0) { dashPanelTimer--; player.speedModifier = 1.8; }
 
-    if (dashPanelTimer > 0) {
-        dashPanelTimer--;
-        player.speedModifier = 1.8; 
-    }
-
+    // 障害物のAI/アクティブ移動処理
     obstacles.forEach(obs => {
         if (obs.type === 'moving_car' && obs.active) {
-            if (!obs.isRunning && obs.x - player.x < 600) {
-                obs.isRunning = true;
-                obs.vx = -3.5; 
-            }
-            if (obs.isRunning) {
-                obs.x += obs.vx;
-                obs.y = getGroundY(obs.x) + 15;
-            }
+            if (!obs.isRunning && obs.x - player.x < 600) { obs.isRunning = true; obs.vx = -3.5; }
+            if (obs.isRunning) { obs.x += obs.vx; obs.y = getGroundY(obs.x) + 15; }
         }
         if (obs.type === 'bird' && obs.active) {
-            if (!obs.isRunning && obs.x - player.x < 700) {
-                obs.isRunning = true;
-                obs.vx = -4.5; 
-            }
-            if (obs.isRunning) {
-                obs.x += obs.vx;
-                obs.y += Math.sin(gameFrame * 0.15) * 1;
-            }
+            if (!obs.isRunning && obs.x - player.x < 700) { obs.isRunning = true; obs.vx = -4.5; }
+            if (obs.isRunning) { obs.x += obs.vx; obs.y += Math.sin(gameFrame * 0.15) * 1; }
         }
     });
 
+    // 水たまり判定
     let onPuddle = false;
-    obstacles.forEach(obs => {
-        if (obs.type === 'puddle' && obs.active) {
-            if (player.x + player.width > obs.x && player.x < obs.x + obs.width &&
-                player.y + player.height >= obs.y - 5 && player.y + player.height <= obs.y + obs.height + 10) {
-                onPuddle = true;
-            }
-        }
-    });
+    obstacles.forEach(obs => { if (obs.type === 'puddle' && obs.active && player.x + player.width > obs.x && player.x < obs.x + obs.width && player.y + player.height >= obs.y - 5 && player.y + player.height <= obs.y + 20) onPuddle = true; });
 
-    if (onPuddle) {
-        if (selectedCharKey === 'zuma') {
-            isZumaDashing = true; 
-        } else {
-            if (dashPanelTimer === 0) player.speedModifier = 0.5; 
-        }
-    }
+    if (onPuddle) { if (selectedCharKey === 'zuma') isZumaDashing = true; else if (dashPanelTimer === 0) player.speedModifier = 0.5; }
+    if (selectedCharKey === 'zuma' && isZumaDashing && dashPanelTimer === 0) player.speedModifier = 1.5;
 
-    if (selectedCharKey === 'zuma' && isZumaDashing && dashPanelTimer === 0) {
-        player.speedModifier = 1.5;
-    }
+    // ジャンプ・ホバー挙動
+    if (selectedCharKey === 'skye' && isHovering) { player.vy = 0; hoverTimer--; if (hoverTimer <= 0 || !isInputPressing) isHovering = false; }
+    else if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) { player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames)); jumpCounter++; }
 
-    if (selectedCharKey === 'skye' && isHovering) {
-        player.vy = 0; 
-        hoverTimer--;
-        if (hoverTimer <= 0 || !isInputPressing) isHovering = false;
-    } else {
-        if (player.isJumping && isInputPressing && jumpCounter < charConfig.maxJumpFrames) {
-            player.vy -= 0.65 * (1 - (jumpCounter / charConfig.maxJumpFrames));
-            jumpCounter++;
-        }
-    }
+    player.x += charConfig.baseSpeed * player.speedModifier;
+    let targetGroundY = getGroundY(player.x);
 
-    let nextX = player.x + charConfig.baseSpeed * player.speedModifier;
-    let targetGroundY = getGroundY(nextX);
+    let currentPit = obstacles.find(obs => obs.type === 'pit' && obs.active && (player.x + player.width/2) > obs.x + 15 && (player.x + player.width/2) < obs.x + obs.width - 15);
 
-    let currentPit = null;
-    obstacles.forEach(obs => {
-        if (obs.type === 'pit' && obs.active) {
-            let playerCenterX = nextX + player.width / 2;
-            if (playerCenterX > obs.x + 15 && playerCenterX < obs.x + obs.width - 15) currentPit = obs;
-        }
-    });
-
-    player.x = nextX;
     if (!(selectedCharKey === 'skye' && isHovering)) player.vy += player.gravity;
     player.y += player.vy;
 
     if (currentPit) {
-        if (player.y >= targetGroundY) {
-            player.isFallingInPit = true; player.vy = 4; 
-            player.pitResetX = currentPit.x + currentPit.width + 20; 
-            triggerPitFall();
-            if (currentState === STATES.GAMEOVER) return; 
-        }
+        if (player.y >= targetGroundY) { player.isFallingInPit = true; player.vy = 4; player.pitResetX = currentPit.x + currentPit.width + 20; triggerPitFall(); }
     } else {
-        let currentGroundY = getGroundY(player.x);
-        if (player.y >= currentGroundY) {
-            player.y = currentGroundY; player.vy = 0; 
-            
-            if (player.isJumping) {
-                player.isJumping = false;
-                if (selectedCharKey === 'zuma') isZumaDashing = false; 
-            }
-            isHovering = false;
-        }
+        if (player.y >= targetGroundY) { player.y = targetGroundY; player.vy = 0; if (player.isJumping) { player.isJumping = false; if (selectedCharKey === 'zuma') isZumaDashing = false; } isHovering = false; }
     }
 
     cameraX = player.x - 100;
 
-    dashPanels.forEach(panel => {
-        if (player.x + player.width > panel.x && player.x < panel.x + panel.width &&
-            player.y + player.height >= panel.y - 10 && player.y + player.height <= panel.y + panel.height + 5) {
-            if (dashPanelTimer === 0) {
-                dashPanelTimer = 60; 
-                playSe(audioAssets.seHeal);
-                addTextPopup(player.x + 20, player.y - 10, "⚡超パウダッシュ！", "#3B82F6");
+    // 【新規】ケントお助け（パウパック磁力）有効時間デクリメント
+    if (ryderActiveTimer > 0) ryderActiveTimer--;
+
+    // 衝突・回収判定群
+    dashPanels.forEach(panel => { if (player.x + player.width > panel.x && player.x < panel.x + panel.width && player.y + player.height >= panel.y - 10 && player.y + player.height <= panel.y + 20) { if (dashPanelTimer === 0) { dashPanelTimer = 60; playSe(audioAssets.seHeal); addTextPopup(player.x + 20, player.y - 10, "⚡超パウダッシュ！", "#3B82F6"); } } });
+    
+    // 【新規】ケントの通信機回収
+    if (ryderItem.active && player.x < ryderItem.x + ryderItem.width && player.x + player.width > ryderItem.x && player.y < ryderItem.y + ryderItem.height && player.y + player.height > ryderItem.y) {
+        ryderItem.active = false;
+        ryderActiveTimer = 360; // 6秒間持続
+        playSe(audioAssets.seHeal);
+        addTextPopup(player.x, player.y - 30, "📞 ケント「パウ・パックをつかって！」", "#FFD700");
+        BADGE_CONFIG.ryder_call.unlocked = true;
+        saveBadges();
+    }
+
+    // クッキー回収（お助けモード時の自動引き寄せロジックを含む）
+    cookies.forEach(c => {
+        if (!c.collected) {
+            if (ryderActiveTimer > 0) {
+                let dx = (player.x + player.width/2) - c.x;
+                let dy = (player.y + player.height/2) - c.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < 260) { 
+                    c.x += (dx / dist) * 7.5;
+                    c.y += (dy / dist) * 7.5;
+                }
+            }
+            if (player.x < c.x + 30 && player.x + player.width > c.x && player.y < c.y + 30 && player.y + player.height > c.y) {
+                c.collected = true; score++; playSe(audioAssets.seCookie); addTextPopup(c.x, c.y, "+1", "#FEF08A");
             }
         }
     });
 
-    cookies.forEach(cookie => {
-        if (!cookie.collected &&
-            player.x < cookie.x + cookie.width && player.x + player.width > cookie.x &&
-            player.y < cookie.y + cookie.height && player.y + player.height > cookie.y) {
-            cookie.collected = true; score++; playSe(audioAssets.seCookie);
-            addTextPopup(cookie.x, cookie.y, "+1", "#FEF08A"); 
-        }
-    });
+    bones.forEach(b => { if (!b.collected && player.x < b.x + 35 && player.x + player.width > b.x && player.y < b.y + 35 && player.y + player.height > b.y) { b.collected = true; playSe(audioAssets.seHeal); if (lives < 5) lives++; addTextPopup(b.x, b.y, "❤️ライフ回復", "#EF4444"); } });
+    shieldItems.forEach(s => { if (!s.collected && player.x < s.x + 40 && player.x + player.width > s.x && player.y < s.y + 40 && player.y + player.height > s.y) { s.collected = true; playSe(audioAssets.seHeal); if (selectedCharKey === 'rocky') { hasRockyShield = true; addTextPopup(s.x, s.y, "🛡️バリアゲット", "#10B981"); } else { score += 3; addTextPopup(s.x, s.y, "+3", "#10B981"); } } });
 
-    bones.forEach(bone => {
-        if (!bone.collected &&
-            player.x < bone.x + bone.width && player.x + player.width > bone.x &&
-            player.y < bone.y + bone.height && player.y + player.height > bone.y) {
-            bone.collected = true; playSe(audioAssets.seHeal); if (lives < 5) lives++; 
-            addTextPopup(bone.x, bone.y, "❤️ライフ回復", "#EF4444"); 
-        }
-    });
-
-    shieldItems.forEach(shield => {
-        if (!shield.collected &&
-            player.x < shield.x + shield.width && player.x + player.width > shield.x &&
-            player.y < shield.y + shield.height && player.y + player.height > shield.y) {
-            shield.collected = true; 
-            playSe(audioAssets.seHeal);
-            
-            if (selectedCharKey === 'rocky') {
-                hasRockyShield = true; 
-                addTextPopup(shield.x, shield.y, "🛡️バリアゲット", "#10B981"); 
-            } else {
-                score += 3; 
-                addTextPopup(shield.x, shield.y, "+3", "#10B981"); 
-            }
-        }
-    });
-
+    // 敵・障害物接触
     obstacles.forEach(obs => {
         if (!obs.active || obs.type === 'pit' || currentState === STATES.GAMEOVER) return;
-
-        let isColliding = player.x < obs.x + obs.width && player.x + player.width > obs.x &&
-                          player.y < obs.y + obs.height && player.y + player.height > obs.y;
-        if (!isColliding) return;
-
-        if (obs.type === 'spring') {
-            if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 15) {
-                player.y = obs.y - player.height;
-                if (selectedCharKey === 'marshall') {
-                    player.vy = -20.5;
-                } else {
-                    player.vy = -16.5;
-                }
-                player.isJumping = true;
-                jumpCounter = charConfig.maxJumpFrames;
-                playSe(audioAssets.seJump);
-                addTextPopup(player.x + 20, player.y - 10, "ジャンプ台！", "#EF4444");
-            }
-            return;
-        }
-
-        if (obs.type === 'car' || obs.type === 'moving_car' || obs.type === 'box' || obs.type === 'cone' || obs.type === 'bird') {
-            if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20 && obs.type !== 'bird') {
-                player.y = obs.y - player.height;
-                
-                if (selectedCharKey === 'marshall') { player.vy = -17.5; } 
-                else { player.vy = -14.5; }
-                
-                player.isJumping = true;
-                jumpCounter = charConfig.maxJumpFrames; 
-                launchObstacleEffect(obs); 
-                playSe(audioAssets.seJump); 
+        if (player.x < obs.x + obs.width && player.x + player.width > obs.x && player.y < obs.y + obs.height && player.y + player.height > obs.y) {
+            if (obs.type === 'spring') {
+                if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 15) { player.y = obs.y - player.height; player.vy = (selectedCharKey === 'marshall') ? -20.5 : -16.5; player.isJumping = true; jumpCounter = charConfig.maxJumpFrames; playSe(audioAssets.seJump); addTextPopup(player.x + 20, player.y - 10, "ジャンプだい！", "#EF4444"); }
             } else {
-                if (player.invincibleTimer === 0) { 
-                    triggerDamage(); 
-                    if (obs.active && !hasRockyShield) launchObstacleEffect(obs); 
-                }
-            }
-        } else if (obs.type === 'cat') {
-            if (player.invincibleTimer === 0) { 
-                triggerDamage(); 
-                if (obs.active && !hasRockyShield) launchObstacleEffect(obs); 
+                if (player.vy > 0 && player.y + player.height - player.vy <= obs.y + 20 && obs.type !== 'bird') { player.y = obs.y - player.height; player.vy = (selectedCharKey === 'marshall') ? -17.5 : -14.5; player.isJumping = true; jumpCounter = charConfig.maxJumpFrames; launchObstacleEffect(obs); playSe(audioAssets.seJump); }
+                else if (player.invincibleTimer === 0) { triggerDamage(); if (obs.active && !hasRockyShield) launchObstacleEffect(obs); }
             }
         }
     });
 
-    if (player.x >= goalX && currentState === STATES.PLAY) endGame();
+    if (player.x >= goalX) endGame();
 }
 
 function triggerJumpStart() {
     if (player.isFallingInPit) return;
-
-    if (selectedCharKey === 'skye' && player.isJumping && !isHovering) {
-        isHovering = true; hoverTimer = 55; isInputPressing = true; playSe(audioAssets.seJump); return;
-    }
-
-    if (!player.isJumping) {
-        const charConfig = CHARACTER_CONFIG[selectedCharKey];
-        player.vy = -charConfig.jumpPower; player.isJumping = true; jumpCounter = 0; isInputPressing = true; playSe(audioAssets.seJump);
-    }
+    if (selectedCharKey === 'skye' && player.isJumping && !isHovering) { isHovering = true; hoverTimer = 55; isInputPressing = true; playSe(audioAssets.seJump); return; }
+    if (!player.isJumping) { player.vy = -CHARACTER_CONFIG[selectedCharKey].jumpPower; player.isJumping = true; jumpCounter = 0; isInputPressing = true; playSe(audioAssets.seJump); }
 }
-
-function triggerJumpEnd() {
-    isInputPressing = false;
-    if (selectedCharKey === 'skye') isHovering = false;
-}
-
-function triggerGameOver() {
-    currentState = STATES.GAMEOVER; playBgm(audioAssets.bgmGameover);
-}
-
-function launchObstacleEffect(obs) {
-    obs.active = false;
-    fallingObstacles.push({
-        type: obs.type, x: obs.x, y: obs.y, width: obs.width, height: obs.height,
-        vx: 4 + Math.random() * 4, vy: -10 - Math.random() * 5, 
-        gravity: 0.6, rotation: 0, rotSpeed: 0.25 + Math.random() * 0.25
-    });
-}
+function triggerJumpEnd() { isInputPressing = false; if (selectedCharKey === 'skye') isHovering = false; }
+function triggerGameOver() { currentState = STATES.GAMEOVER; playBgm(audioAssets.bgmGameover); }
+function launchObstacleEffect(obs) { obs.active = false; fallingObstacles.push({ type: obs.type, x: obs.x, y: obs.y, width: obs.width, height: obs.height, vx: 5, vy: -11, gravity: 0.6, rotation: 0, rotSpeed: 0.3 }); }
 
 function endGame() {
-    playSe(audioAssets.seClear);
-    ranking.push(score); ranking.sort((a, b) => b - a); ranking = ranking.slice(0, 3);
-    localStorage.setItem("paw_game_ranking", JSON.stringify(ranking));
-    createConfetti(); 
-    currentState = STATES.RESULT; playBgm(audioAssets.bgmClear);
+    playSe(audioAssets.seClear); ranking.push(score); ranking.sort((a, b) => b - a); ranking = ranking.slice(0, 3); localStorage.setItem("paw_game_ranking", JSON.stringify(ranking));
+    
+    // バッジ解放ジャッジメント
+    badgeData.totalCookies += score;
+    BADGE_CONFIG.first_clear.unlocked = true;
+    if(score >= 20) BADGE_CONFIG.cookie_master.unlocked = true;
+    if(badgeData.totalCookies >= 50) BADGE_CONFIG.total_cookie.unlocked = true;
+    if(isLifeMode) BADGE_CONFIG.hard_clear.unlocked = true;
+    saveBadges();
+
+    createConfetti(); currentState = STATES.RESULT; playBgm(audioAssets.bgmClear);
 }
 
-// --- 描画処理 ---
+// --- メインレンダリング（描画） ---
 function draw() {
     ctx.clearRect(0, 0, 800, 400); 
     if (currentState === STATES.TITLE) drawTitleScreen();
     else if (currentState === STATES.CHAR_SELECT) drawCharSelectScreen();
     else if (currentState === STATES.MODE_SELECT) drawModeSelectScreen(); 
+    else if (currentState === STATES.STAGE_SELECT) drawStageSelectScreen(); 
     else if (currentState === STATES.PLAY || currentState === STATES.PAUSE) drawPlayScreen(); 
     else if (currentState === STATES.RESULT) drawResultScreen();
     else if (currentState === STATES.GAMEOVER) drawGameOverScreen();       
     else if (currentState === STATES.RANKING_VIEW) drawRankingViewScreen();
+    else if (currentState === STATES.BADGE_VIEW) drawBadgeViewScreen();
 }
 
 function drawTitleScreen() {
-    let skyGrad = ctx.createLinearGradient(0, 0, 0, 400);
-    skyGrad.addColorStop(0, "#00BFFF"); skyGrad.addColorStop(0.6, "#1E90FF"); skyGrad.addColorStop(1, "#4682B4");
+    let skyGrad = ctx.createLinearGradient(0, 0, 0, 400); skyGrad.addColorStop(0, "#00BFFF"); skyGrad.addColorStop(1, "#4682B4");
     ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, 800, 400);
-
-    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-    function drawCloud(cx, cy, scale) {
-        ctx.beginPath(); ctx.arc(cx, cy, 25*scale, 0, Math.PI*2); ctx.arc(cx+30*scale, cy-10*scale, 35*scale, 0, Math.PI*2);
-        ctx.arc(cx+70*scale, cy, 25*scale, 0, Math.PI*2); ctx.arc(cx+35*scale, cy+15*scale, 25*scale, 0, Math.PI*2); ctx.closePath(); ctx.fill();
-    }
-    drawCloud(80, 100, 1.0); drawCloud(620, 80, 1.2); drawCloud(340, 60, 0.7);
-
-    ctx.fillStyle = "rgba(255, 215, 0, 0.35)"; ctx.beginPath(); ctx.arc(400, 150, 65, 0, Math.PI*2); ctx.fill();
-
-    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = "#A31D1D"; ctx.font = "bold 56px 'Arial Black', sans-serif"; ctx.fillText("パウ・パトロール ゲーム", 400 + 4, 154);
-
-    ctx.fillStyle = "#FFD700"; ctx.strokeStyle = "#DC2626"; ctx.lineWidth = 10;
-    ctx.strokeText("パウ・パトロール ゲーム", 400, 150); ctx.fillText("パウ・パトロール ゲーム", 400, 150);
-
-    let blink = Math.floor(gameFrame / 25) % 2 === 0;
-    ctx.fillStyle = blink ? "#FFFFFF" : "#FFE4E1"; ctx.font = "bold 24px sans-serif"; ctx.fillText("👇 タップして スタート！ 👇", 400, 280);
-
+    ctx.textAlign = "center"; ctx.fillStyle = "#FFD700"; ctx.strokeStyle = "#DC2626"; ctx.lineWidth = 10; ctx.font = "bold 56px sans-serif"; ctx.strokeText("パウ・パトロール ゲーム", 400, 150); ctx.fillText("パウ・パトロール ゲーム", 400, 150);
+    ctx.fillStyle = (Math.floor(gameFrame / 25) % 2 === 0) ? "#FFFFFF" : "#FFE4E1"; ctx.font = "bold 24px sans-serif"; ctx.fillText("👇 タップして スタート！ 👇", 400, 260);
+    
+    // 下部ボタン
     ctx.fillStyle = "#FF9F43"; ctx.beginPath(); ctx.roundRect(rankingButton.x, rankingButton.y, rankingButton.width, rankingButton.height, 12); ctx.fill();
-    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 18px sans-serif"; ctx.textBaseline = "middle";
-    ctx.fillText("🏆 かこのきろく", rankingButton.x + (rankingButton.width / 2), rankingButton.y + (rankingButton.height / 2) + 1);
-    ctx.textBaseline = "alphabetic"; 
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 16px sans-serif"; ctx.textBaseline = "middle"; ctx.fillText("🏆 かこのきろく", rankingButton.x + 80, rankingButton.y + 22);
+    
+    ctx.fillStyle = "#A855F7"; ctx.beginPath(); ctx.roundRect(badgeButton.x, badgeButton.y, badgeButton.width, badgeButton.height, 12); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; ctx.fillText("🎖️ パウ・バッジ", badgeButton.x + 80, badgeButton.y + 22);
+    ctx.textBaseline = "alphabetic";
 }
 
 function drawCharSelectScreen() {
     ctx.fillStyle = "#E0F2FE"; ctx.fillRect(0, 0, 800, 400);
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillText("だれで あそぶ？", 400, 55);
-    
-    drawSelectButton('chase', charButtons.chase, CHARACTER_CONFIG.chase);
-    drawSelectButton('marshall', charButtons.marshall, CHARACTER_CONFIG.marshall);
-    drawSelectButton('rubble', charButtons.rubble, CHARACTER_CONFIG.rubble);
-    drawSelectButton('skye', charButtons.skye, CHARACTER_CONFIG.skye);
-    drawSelectButton('rocky', charButtons.rocky, CHARACTER_CONFIG.rocky);
-    drawSelectButton('zuma', charButtons.zuma, CHARACTER_CONFIG.zuma);
-
-    if (showCharPopup) {
-        drawCharPopupScreen();
-    }
-}
-
-function drawSelectButton(key, rect, config) {
-    ctx.fillStyle = config.color; ctx.beginPath(); ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 15); ctx.fill();
-    ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.roundRect(rect.x + 5, rect.y + 5, rect.width - 10, rect.height - 10, 12); ctx.fill();
-    
-    let currentImgKey = (Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2';
-    let img = imgAssets.chars[key][currentImgKey];
-    if (img && img.complete) ctx.drawImage(img, rect.x + 8, rect.y + 20, 70, 70);
-    
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.fillText(config.name, rect.x + 84, rect.y + rect.height / 2);
-}
-
-function wrapText(context, text, x, y, maxWidth, lineHeight) {
-    let words = text.split("");
-    let line = "";
-    let lines = [];
-
-    for (let n = 0; n < words.length; n++) {
-        let testLine = line + words[n];
-        let metrics = context.measureText(testLine);
-        let testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
-            lines.push(line);
-            line = words[n];
-        } else {
-            line = testLine;
-        }
-    }
-    lines.push(line);
-
-    for (let i = 0; i < lines.length; i++) {
-        context.fillText(lines[i], x, y + (i * lineHeight));
-    }
+    ctx.fillStyle = "#1E293B"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center"; ctx.fillText("だれで あそぶ？", 400, 55);
+    Object.keys(charButtons).forEach(key => {
+        let rect = charButtons[key]; let config = CHARACTER_CONFIG[key];
+        ctx.fillStyle = config.color; ctx.beginPath(); ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 15); ctx.fill();
+        ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.roundRect(rect.x + 5, rect.y + 5, rect.width - 10, rect.height - 10, 12); ctx.fill();
+        let img = imgAssets.chars[key][(Math.floor(gameFrame / 15) % 2 === 0) ? 'run1' : 'run2'];
+        if (img && img.complete) ctx.drawImage(img, rect.x + 8, rect.y + 20, 70, 70);
+        ctx.fillStyle = "#1E293B"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(config.name, rect.x + 84, rect.y + rect.height / 2);
+    });
+    if (showCharPopup) drawCharPopupScreen();
 }
 
 function drawCharPopupScreen() {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(0, 0, 800, 400);
-
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(0, 0, 800, 400);
     const config = CHARACTER_CONFIG[popupCharKey];
-
-    ctx.fillStyle = "#FFFFFF";
-    ctx.beginPath();
-    ctx.roundRect(popupRect.x, popupRect.y, popupRect.width, popupRect.height, 20);
-    ctx.fill();
-    ctx.strokeStyle = config.color;
-    ctx.lineWidth = 5;
-    ctx.stroke();
-
-    ctx.fillStyle = "#EF4444";
-    ctx.beginPath();
-    ctx.roundRect(popupCloseBtn.x, popupCloseBtn.y, popupCloseBtn.width, popupCloseBtn.height, 8);
-    ctx.fill();
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 16px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("✕", popupCloseBtn.x + 15, popupCloseBtn.y + 15);
-
-    let img = imgAssets.chars[popupCharKey]['jump'];
-    if (img && img.complete) {
-        ctx.drawImage(img, popupRect.x + 30, popupRect.y + 50, 120, 120);
-    }
-
-    ctx.textAlign = "left";
-    ctx.fillStyle = config.color;
-    ctx.font = "bold 30px sans-serif";
-    ctx.fillText(config.name, popupRect.x + 180, popupRect.y + 75);
-
-    ctx.fillStyle = "#1E293B";
-    ctx.font = "bold 18px sans-serif";
-    ctx.fillText(config.skillTitle, popupRect.x + 180, popupRect.y + 120);
-
-    ctx.fillStyle = "#475569";
-    ctx.font = "bold 15px sans-serif";
-    wrapText(ctx, config.skillDesc, popupRect.x + 180, popupRect.y + 155, 290, 22);
-
-    ctx.fillStyle = config.color;
-    ctx.beginPath();
-    ctx.roundRect(popupSelectBtn.x, popupSelectBtn.y, popupSelectBtn.width, popupSelectBtn.height, 15);
-    ctx.fill();
-    ctx.strokeStyle = "#FFFFFF";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 20px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("これで あそぶ！", popupSelectBtn.x + 100, popupSelectBtn.y + 25);
-    ctx.textBaseline = "alphabetic"; 
+    ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.roundRect(popupRect.x, popupRect.y, popupRect.width, popupRect.height, 20); ctx.fill();
+    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(popupCloseBtn.x, popupCloseBtn.y, popupCloseBtn.width, popupCloseBtn.height, 8); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("✕", popupCloseBtn.x + 15, popupCloseBtn.y + 15);
+    let img = imgAssets.chars[popupCharKey]['jump']; if (img && img.complete) ctx.drawImage(img, popupRect.x + 30, popupRect.y + 50, 120, 120);
+    ctx.textAlign = "left"; ctx.fillStyle = config.color; ctx.font = "bold 30px sans-serif"; ctx.fillText(config.name, popupRect.x + 180, popupRect.y + 75);
+    ctx.fillStyle = "#1E293B"; ctx.font = "bold 18px sans-serif"; ctx.fillText(config.skillTitle, popupRect.x + 180, popupRect.y + 120);
+    ctx.fillStyle = "#475569"; ctx.font = "bold 15px sans-serif"; ctx.fillText(config.skillDesc, popupRect.x + 180, popupRect.y + 160);
+    ctx.fillStyle = config.color; ctx.beginPath(); ctx.roundRect(popupSelectBtn.x, popupSelectBtn.y, popupSelectBtn.width, popupSelectBtn.height, 15); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.fillText("これで あそぶ！", popupSelectBtn.x + 100, popupSelectBtn.y + 28); ctx.textBaseline = "alphabetic";
 }
 
 function drawModeSelectScreen() {
     ctx.fillStyle = "#FFFAF0"; ctx.fillRect(0, 0, 800, 400);
-    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.fillText("どちらの モードに する？", 400, 90);
-
+    ctx.textAlign = "center"; ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.fillText("どちらの モードに する？", 400, 90);
     if (btnImgNoLife.complete) ctx.drawImage(btnImgNoLife, modeButtons.noLife.x, modeButtons.noLife.y);
     if (btnImgWithLife.complete) ctx.drawImage(btnImgWithLife, modeButtons.withLife.x, modeButtons.withLife.y);
 }
 
-function drawPlayScreen() {
-    ctx.fillStyle = "#87CEEB"; ctx.fillRect(0, 0, 800, 400);
+function drawStageSelectScreen() {
+    ctx.fillStyle = "#F0FDF4"; ctx.fillRect(0, 0, 800, 400);
+    ctx.textAlign = "center"; ctx.fillStyle = "#1E293B"; ctx.font = "bold 32px sans-serif"; ctx.fillText("どこに ぼうケンに 行く？ 🗺️", 400, 90);
+    Object.keys(stageButtons).forEach(key => {
+        let btn = stageButtons[key];
+        ctx.fillStyle = btn.color; ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 18); ctx.fill();
+        ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 4; ctx.stroke();
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(STAGE_CONFIG[key].name, btn.x + btn.width/2, btn.y + btn.height/2);
+    });
+    ctx.textBaseline = "alphabetic";
+}
 
+function drawBadgeViewScreen() {
+    ctx.fillStyle = "#FAF5FF"; ctx.fillRect(0, 0, 800, 400);
+    ctx.textAlign = "center"; ctx.fillStyle = "#7E22CE"; ctx.font = "bold 28px sans-serif"; ctx.fillText("🎖️ あつめた パウ・バッジ 図鑑 🎖️", 400, 50);
+    ctx.fillStyle = "#4B5563"; ctx.font = "bold 14px sans-serif"; ctx.fillText(`これまでに あつめたクッキーの合計: ${badgeData.totalCookies} 個`, 400, 80);
+
+    let idx = 0;
+    Object.keys(BADGE_CONFIG).forEach(key => {
+        let b = BADGE_CONFIG[key];
+        let bx = 60 + (idx % 3) * 240;
+        let by = 110 + Math.floor(idx / 3) * 100;
+
+        ctx.fillStyle = b.unlocked ? "#FFFFFF" : "#E5E7EB";
+        ctx.beginPath(); ctx.roundRect(bx, by, 220, 80, 12); ctx.fill();
+        ctx.strokeStyle = b.unlocked ? "#A855F7" : "#9CA3AF";
+        ctx.lineWidth = 3; ctx.stroke();
+
+        ctx.textAlign = "left";
+        ctx.fillStyle = b.unlocked ? "#1E1B4B" : "#9CA3AF";
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillText(b.unlocked ? b.title : "？？？ バッジ 🔒", bx + 15, by + 32);
+
+        ctx.fillStyle = b.unlocked ? "#4B5563" : "#9CA3AF";
+        ctx.font = "12px sans-serif";
+        ctx.fillText(b.desc, bx + 15, by + 58);
+        idx++;
+    });
+
+    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(uiBackButton.x, uiBackButton.y, uiBackButton.width, uiBackButton.height, 12); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "center"; ctx.font = "bold 18px sans-serif"; ctx.textBaseline = "middle";
+    ctx.fillText("もどる", uiBackButton.x + 80, uiBackButton.y + 22);
+    ctx.textBaseline = "alphabetic";
+}
+
+function drawPlayScreen() {
+    const stage = STAGE_CONFIG[selectedStageKey];
+    ctx.fillStyle = stage.bgColor; ctx.fillRect(0, 0, 800, 400);
+
+    // 背景描画 (パララックス効果)
     ctx.save(); ctx.translate(-cameraX * 0.3, 0);
-    bgBuildings.forEach(b => {
-        let baseFloorY = BASE_GROUND_Y + 60; ctx.fillStyle = b.color;
-        ctx.fillRect(b.x, baseFloorY - b.height, b.width, b.height);
-        
-        ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-        let winRows = Math.floor(b.height / 40) - 1; let winCols = Math.floor(b.width / 35);
-        for (let r = 0; r < winRows; r++) {
-            for (let c = 0; c < winCols; c++) {
-                let wx = b.x + 12 + c * 32; let wy = (baseFloorY - b.height) + 15 + r * 35;
-                if (wx + 16 < b.x + b.width) ctx.fillRect(wx, wy, 16, 18);
-            }
-        }
-        if (b.roof === 'triangle') {
-            ctx.fillStyle = "#E11D48"; ctx.beginPath(); ctx.moveTo(b.x - 8, baseFloorY - b.height); ctx.lineTo(b.x + b.width / 2, baseFloorY - b.height - 35); ctx.lineTo(b.x + b.width + 8, baseFloorY - b.height); ctx.closePath(); ctx.fill();
-        } else if (b.roof === 'dome') {
-            ctx.fillStyle = "#1D4ED8"; ctx.beginPath(); ctx.arc(b.x + b.width / 2, baseFloorY - b.height, b.width / 2.5, Math.PI, 0); ctx.fill();
+    bgElements.forEach(b => {
+        let baseFloorY = BASE_GROUND_Y + 60;
+        if (stage.bgType === "building") {
+            ctx.fillStyle = b.color; ctx.fillRect(b.x, baseFloorY - b.height, b.width, b.height);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+            for (let r = 0; r < 3; r++) { for (let c = 0; c < 3; c++) { if (15 + c*30 < b.width && 15 + r*35 < b.height) ctx.fillRect(b.x + 15 + c * 30, (baseFloorY - b.height) + 15 + r * 35, 15, 18); } }
+        } else if (stage.bgType === "palm") {
+            ctx.fillStyle = "#8B4513"; ctx.fillRect(b.x + b.width/2 - 6, baseFloorY - 120, 12, 120);
+            ctx.fillStyle = "#22C55E"; ctx.beginPath(); ctx.arc(b.x + b.width/2, baseFloorY - 120, 35, 0, Math.PI, true); ctx.fill();
+        } else if (stage.bgType === "pine") {
+            ctx.fillStyle = "#5C4033"; ctx.fillRect(b.x + b.width/2 - 5, baseFloorY - 30, 10, 30);
+            ctx.fillStyle = "#2E8B57"; ctx.beginPath(); ctx.moveTo(b.x + b.width/2, baseFloorY - 130); ctx.lineTo(b.x + b.width/2 - 40, baseFloorY - 30); ctx.lineTo(b.x + b.width/2 + 40, baseFloorY - 30); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "#FFFFFF"; ctx.fillRect(b.x + b.width/2 - 20, baseFloorY - 50, 40, 5); 
         }
     });
     ctx.restore();
     
+    // スクロール追従地面のレンダリング
     ctx.save(); ctx.translate(-cameraX, 0);
-
-    ctx.fillStyle = "#22C55E"; ctx.beginPath();
+    ctx.fillStyle = stage.groundColor; ctx.beginPath();
     let startCamX = Math.max(0, cameraX - 100); let endCamX = cameraX + 800 + 100;
     ctx.moveTo(startCamX, 400);
     for (let x = startCamX; x <= endCamX; x += 5) {
-        let inPit = false;
-        obstacles.forEach(obs => { if (obs.type === 'pit' && obs.active && x >= obs.x && x <= obs.x + obs.width) inPit = true; });
-        if (inPit) ctx.lineTo(x, 400); else ctx.lineTo(x, getGroundY(x) + 60);
+        if (obstacles.find(obs => obs.type === 'pit' && obs.active && x >= obs.x && x <= obs.x + obs.width)) ctx.lineTo(x, 400);
+        else ctx.lineTo(x, getGroundY(x) + 60);
     }
     ctx.lineTo(endCamX, 400); ctx.closePath(); ctx.fill();
 
-    obstacles.forEach(obs => { if (obs.type === 'pit' && obs.active) { ctx.fillStyle = "#78350F"; ctx.fillRect(obs.x - 3, getGroundY(obs.x) + 60, 4, 150); ctx.fillRect(obs.x + obs.width - 1, getGroundY(obs.x + obs.width) + 60, 4, 150); } });
+    // 穴のディテール
+    obstacles.forEach(obs => { if (obs.type === 'pit' && obs.active) { ctx.fillStyle = "#78350F"; ctx.fillRect(obs.x - 2, getGroundY(obs.x) + 60, 3, 150); ctx.fillRect(obs.x + obs.width - 1, getGroundY(obs.x + obs.width) + 60, 3, 150); } });
 
-    dashPanels.forEach(panel => {
-        let dpImg = imgAssets.items.dashPanel;
-        if (dpImg && dpImg.complete) ctx.drawImage(dpImg, panel.x, panel.y, panel.width, panel.height);
-    });
+    // 各種アセット描画
+    dashPanels.forEach(panel => { if (imgAssets.items.dashPanel.complete) ctx.drawImage(imgAssets.items.dashPanel, panel.x, panel.y, panel.width, panel.height); });
+
+    if (ryderItem.active && imgRyderPad.complete) {
+        ctx.drawImage(imgRyderPad, ryderItem.x, ryderItem.y + Math.sin(gameFrame * 0.1) * 6, ryderItem.width, ryderItem.height);
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("📞おたすけ", ryderItem.x + 22, ryderItem.y - 5);
+    }
 
     obstacles.forEach(obs => {
         if (!obs.active || obs.type === 'pit') return;
-        
-        if (obs.type === 'spring') {
-            let springImg = imgAssets.items.spring;
-            if (springImg && springImg.complete) {
-                ctx.drawImage(springImg, obs.x, obs.y, obs.width, obs.height);
-            } else {
-                ctx.fillStyle = "#EF4444";
-                ctx.fillRect(obs.x, obs.y + 15, obs.width, obs.height - 15);
-                ctx.fillStyle = "#FFFFFF";
-                ctx.fillRect(obs.x, obs.y + 10, obs.width, 5);
+        if (obs.type === 'spring') { if (imgAssets.items.spring.complete) ctx.drawImage(imgAssets.items.spring, obs.x, obs.y, obs.width, obs.height); }
+        else {
+            let obsImg = imgAssets.obstacles[obs.type];
+            if (obsImg && obsImg.complete) { ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height); } 
+            else {
+                ctx.fillStyle = "#EF4444"; ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
             }
-        } else {
-            let obsImg = imgAssets.obstacles[obs.type]; 
-            if (obsImg && obsImg.complete) ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height);
+            if (selectedStageKey === 'snow' && obs.type !== 'puddle' && obs.type !== 'bird') {
+                ctx.fillStyle = "#FFFFFF"; ctx.fillRect(obs.x, obs.y, obs.width, 6);
+            }
         }
     });
 
-    cookies.forEach(cookie => { if (!cookie.collected) { let cookieImg = imgAssets.items.cookie; if (cookieImg && cookieImg.complete) ctx.drawImage(cookieImg, cookie.x, cookie.y, cookie.width, cookie.height); } });
-    bones.forEach(bone => { if (!bone.collected) { let boneImg = imgAssets.items.bone; if (boneImg && boneImg.complete) ctx.drawImage(boneImg, bone.x, bone.y, bone.width, bone.height); } });
-    
-    shieldItems.forEach(shield => { 
-        if (!shield.collected) { 
-            let sImg = imgAssets.items.rockyShield; 
-            let animY = shield.y + Math.sin(gameFrame * 0.08) * 5;
-            if (sImg && sImg.complete) ctx.drawImage(sImg, shield.x, animY, shield.width, shield.height); 
-        } 
-    });
+    cookies.forEach(c => { if (!c.collected && imgAssets.items.cookie.complete) ctx.drawImage(imgAssets.items.cookie, c.x, c.y, 30, 30); });
+    bones.forEach(b => { if (!b.collected && imgAssets.items.bone.complete) ctx.drawImage(imgAssets.items.bone, b.x, b.y, 35, 35); });
+    shieldItems.forEach(s => { if (!s.collected && imgAssets.items.rockyShield.complete) ctx.drawImage(imgAssets.items.rockyShield, s.x, s.y + Math.sin(gameFrame*0.08)*4, 40, 40); });
 
-    droppedCookies.forEach(dc => { ctx.save(); ctx.translate(dc.x, dc.y); ctx.rotate(dc.rotation); let cookieImg = imgAssets.items.cookie; if (cookieImg && cookieImg.complete) ctx.drawImage(cookieImg, -15, -15, 30, 30); ctx.restore(); });
-    fallingObstacles.forEach(fo => { ctx.save(); ctx.translate(fo.x + fo.width / 2, fo.y + fo.height / 2); ctx.rotate(fo.rotation); let obsImg = imgAssets.obstacles[fo.type]; if (obsImg && obsImg.complete) ctx.drawImage(obsImg, -fo.width / 2, -fo.height / 2, fo.width, fo.height); ctx.restore(); });
+    droppedCookies.forEach(dc => { ctx.save(); ctx.translate(dc.x, dc.y); if (imgAssets.items.cookie.complete) ctx.drawImage(imgAssets.items.cookie, -15, -15, 30, 30); ctx.restore(); });
+    fallingObstacles.forEach(fo => { ctx.save(); ctx.translate(fo.x + fo.width/2, fo.y + fo.height/2); ctx.rotate(fo.rotation); let img = imgAssets.obstacles[fo.type]; if (img && img.complete) ctx.drawImage(img, -fo.width/2, -fo.height/2, fo.width, fo.height); ctx.restore(); });
 
-    let stationImg = imgAssets.items.pawStation; if (stationImg && stationImg.complete) ctx.drawImage(stationImg, goalX, getGroundY(goalX) - 140, 150, 200);
+    if (imgAssets.items.pawStation.complete) ctx.drawImage(imgAssets.items.pawStation, goalX, getGroundY(goalX) - 140, 150, 200);
 
-    let shouldDrawPlayer = true; if (player.invincibleTimer > 0 && Math.floor(player.invincibleTimer / 4) % 2 === 0) shouldDrawPlayer = false;
-    if (shouldDrawPlayer) {
-        let activeImgKey = 'run1'; 
-        if (player.isFallingInPit || player.isJumping || isHovering) activeImgKey = 'jump';
-        else activeImgKey = (Math.floor(gameFrame / 10) % 2 === 0) ? 'run1' : 'run2';
-        
-        let pImg = imgAssets.chars[selectedCharKey][activeImgKey];
+    // プレイヤーレンダリング
+    if (player.invincibleTimer === 0 || Math.floor(player.invincibleTimer / 4) % 2 === 0) {
+        let activeKey = (player.isFallingInPit || player.isJumping || isHovering) ? 'jump' : ((Math.floor(gameFrame / 10) % 2 === 0) ? 'run1' : 'run2');
+        let pImg = imgAssets.chars[selectedCharKey][activeKey];
         if (pImg && pImg.complete) ctx.drawImage(pImg, player.x, player.y, player.width, player.height);
-
-        if (hasRockyShield) {
-            let sImg = imgAssets.items.rockyShield;
-            if (sImg && sImg.complete) {
-                ctx.drawImage(sImg, player.x - 10, player.y - 10, player.width + 20, player.height + 20);
-            } else {
-                ctx.strokeStyle = "rgba(16, 185, 129, 0.6)"; ctx.lineWidth = 4; ctx.beginPath();
-                ctx.arc(player.x + player.width/2, player.y + player.height/2, player.width/1.3, 0, Math.PI*2); ctx.stroke();
-            }
-        }
-
-        if ((selectedCharKey === 'zuma' && isZumaDashing) || dashPanelTimer > 0) {
-            ctx.fillStyle = dashPanelTimer > 0 ? "rgba(254, 224, 71, 0.6)" : "rgba(30, 144, 255, 0.5)";
-            for (let i = 0; i < 3; i++) {
-                let px = player.x - 10 - (gameFrame % 20) + (i * 10);
-                let py = player.y + player.height - 10 + (Math.sin(gameFrame + i) * 4);
-                ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
-            }
+        if (hasRockyShield && imgAssets.items.rockyShield.complete) ctx.drawImage(imgAssets.items.rockyShield, player.x - 10, player.y - 10, player.width + 20, player.height + 20);
+        
+        // パウパック磁力オーラビジュアル
+        if (ryderActiveTimer > 0) {
+            ctx.strokeStyle = "rgba(59, 130, 246, " + (0.4 + Math.sin(gameFrame * 0.25) * 0.25) + ")";
+            ctx.lineWidth = 4; ctx.beginPath();
+            ctx.arc(player.x + player.width/2, player.y + player.height/2, 65 + Math.sin(gameFrame*0.12)*8, 0, Math.PI*2);
+            ctx.stroke();
         }
     }
 
-    textPopups.forEach(p => {
-        ctx.save();
-        ctx.globalAlpha = p.alpha;
-        ctx.fillStyle = p.color;
-        ctx.font = "bold 16px sans-serif";
-        ctx.textAlign = "center";
-        ctx.shadowColor = "rgba(0,0,0,1)";
-        ctx.shadowBlur = 4;
-        ctx.fillText(p.text, p.x, p.y);
-        ctx.restore();
-    });
-
+    textPopups.forEach(p => { ctx.save(); ctx.globalAlpha = p.alpha; ctx.fillStyle = p.color; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "center"; ctx.fillText(p.text, p.x, p.y); ctx.restore(); });
     ctx.restore();
 
-    let uiCookieImg = imgAssets.items.cookie; if (uiCookieImg && uiCookieImg.complete) { ctx.drawImage(uiCookieImg, 20, 15, 30, 30); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(`× ${score}`, 60, 40); }
+    // 固定レイヤーUI
+    if (imgAssets.items.cookie.complete) ctx.drawImage(imgAssets.items.cookie, 20, 15, 30, 30);
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "left"; ctx.fillText(`× ${score}`, 60, 40);
 
-    if (isLifeMode) {
-        let heartX = 170;
-        for (let i = 0; i < 5; i++) {
-            ctx.font = "26px sans-serif"; if (i < lives) ctx.fillText("❤️", heartX + i * 32, 40); else ctx.fillText("🖤", heartX + i * 32, 40); 
-        }
-    } else {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "left"; ctx.fillText("💚 あんしんモード", 170, 38);
+    if (isLifeMode) { for (let i = 0; i < 5; i++) { ctx.font = "26px sans-serif"; ctx.fillText(i < lives ? "❤️" : "🖤", 170 + i * 32, 40); } }
+    else { ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.font = "bold 18px sans-serif"; ctx.fillText("💚 あんしんモード", 170, 38); }
+
+    if (ryderActiveTimer > 0) {
+        ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.roundRect(380, 15, 160, 24, 6); ctx.fill();
+        ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.roundRect(383, 18, (ryderActiveTimer / 360) * 154, 18, 4); ctx.fill();
+        ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; ctx.fillText("📞 パウ・パックモード！", 460, 32);
     }
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; ctx.beginPath(); ctx.roundRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height, 12); ctx.fill();
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#1E293B"; ctx.font = "bold 20px sans-serif"; ctx.fillText("⏸️", pauseButton.x + (pauseButton.width / 2), pauseButton.y + (pauseButton.height / 2) + 2);
-    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#1E293B"; ctx.font = "bold 20px sans-serif"; ctx.fillText("⏸️", pauseButton.x + 25, pauseButton.y + 25); ctx.textBaseline = "alphabetic";
 
-    if (currentState === STATES.PAUSE) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.4)"; ctx.fillRect(0, 0, 800, 400); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 36px sans-serif"; ctx.textAlign = "center"; ctx.fillText("いちじちゅうだん", 400, 200);
-    }
+    if (currentState === STATES.PAUSE) { ctx.fillStyle = "rgba(0, 0, 0, 0.4)"; ctx.fillRect(0, 0, 800, 400); ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 36px sans-serif"; ctx.textAlign = "center"; ctx.fillText("いちじちゅうだん", 400, 200); }
 }
 
 function drawResultScreen() {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.75)"; ctx.fillRect(0, 0, 800, 400);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)"; ctx.fillRect(0, 0, 800, 400);
+    confettiParticles.forEach(p => { ctx.save(); ctx.translate(p.x, p.y); ctx.fillStyle = p.color; ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size); ctx.restore(); });
+    ctx.textAlign = "center"; ctx.fillStyle = "#FFD700"; ctx.font = "bold 55px sans-serif"; ctx.fillText("パウフェクト！", 400, 90);
+    ctx.font = "bold 28px sans-serif"; ctx.fillStyle = "#FFFFFF"; ctx.fillText(`あつめたクッキー: ${score} こ`, 400, 150);
+    
+    ctx.font = "bold 14px sans-serif"; ctx.fillStyle = "#A855F7";
+    ctx.fillText("🎖️ クリア実績に応じてパウ・バッジ図鑑が更新されたよ！", 400, 190);
 
-    confettiParticles.forEach(p => {
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rotation);
-        ctx.fillStyle = p.color;
-        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-        ctx.restore();
-    });
-
-    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = "#FFD700"; ctx.strokeStyle = "#DC2626"; ctx.lineWidth = 6; ctx.font = "bold 55px sans-serif"; ctx.strokeText("パウフェクト！", 400, 90); ctx.fillText("パウフェクト！", 400, 90);
-    ctx.font = "bold 28px sans-serif"; ctx.fillStyle = "#FFFFFF"; ctx.fillText(`あつめたクッキー: ${score} こ`, 400, 160);
-    ctx.fillStyle = "#E2E8F0"; ctx.font = "bold 20px sans-serif"; ctx.fillText("きろく ランキング", 400, 220);
-    ranking.forEach((rankScore, index) => { ctx.fillText(`${index + 1}い: ${rankScore} こ`, 400, 260 + index * 30); });
+    ctx.fillStyle = "#E2E8F0"; ctx.font = "bold 18px sans-serif"; ctx.fillText("きろく ランキング", 400, 230);
+    ranking.forEach((rk, i) => { ctx.fillText(`${i + 1}い: ${rk} こ`, 400, 265 + i * 28); });
 }
 
 function drawGameOverScreen() {
     ctx.fillStyle = "rgba(15, 23, 42, 0.85)"; ctx.fillRect(0, 0, 800, 400);
-    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = "#94A3B8"; ctx.strokeStyle = "#475569"; ctx.lineWidth = 5; ctx.font = "bold 50px sans-serif"; ctx.strokeText("パウフェクトならず、、、！", 400, 150); ctx.fillText("パウフェクトならず、、、！", 400, 150);
+    ctx.textAlign = "center"; ctx.fillStyle = "#94A3B8"; ctx.font = "bold 45px sans-serif"; ctx.fillText("パウフェクトならず、、、！", 400, 150);
     ctx.font = "bold 24px sans-serif"; ctx.fillStyle = "#F8FAFC"; ctx.fillText(`とちゅうであつめたクッキー: ${score} こ`, 400, 220);
 }
 
 function drawRankingViewScreen() {
     ctx.fillStyle = "#1E293B"; ctx.fillRect(0, 0, 800, 400);
-    ctx.textAlign = "center"; ctx.fillStyle = "#FFD700"; ctx.font = "bold 36px sans-serif"; ctx.textBaseline = "alphabetic"; ctx.fillText("🏆 かこのきろく ベスト3 🏆", 400, 80);
-
+    ctx.textAlign = "center"; ctx.fillStyle = "#FFD700"; ctx.font = "bold 36px sans-serif"; ctx.fillText("🏆 かこのきろく ベスト3 🏆", 400, 80);
     const medalColors = ["#FFD700", "#C0C0C0", "#CD7F32"];
-    ranking.forEach((rankScore, index) => {
-        ctx.fillStyle = medalColors[index] || "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.fillText(`${index + 1} い :  ${rankScore} こ`, 400, 160 + index * 45);
-    });
-
-    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(rankingBackButton.x, rankingBackButton.y, rankingBackButton.width, rankingBackButton.height, 15); ctx.fill();
-    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("もどる", rankingBackButton.x + (rankingBackButton.width / 2), rankingBackButton.y + (rankingBackButton.height / 2));
-    ctx.textBaseline = "alphabetic";
+    ranking.forEach((rk, i) => { ctx.fillStyle = medalColors[i] || "#FFFFFF"; ctx.font = "bold 28px sans-serif"; ctx.fillText(`${i + 1} い :  ${rk} こ`, 400, 160 + i * 45); });
+    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(uiBackButton.x, uiBackButton.y, uiBackButton.width, uiBackButton.height, 12); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 20px sans-serif"; ctx.textBaseline = "middle"; ctx.fillText("もどる", uiBackButton.x + 80, uiBackButton.y + 22); ctx.textBaseline = "alphabetic";
 }
 
-// --- 入力イベント処理 ---
+// --- スマートフォン対応 厳密タッチ・クリック判定 ---
 function handleInputStart(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    // 実際の表示解像度からゲーム内仮想座標 (800x400) への逆算
     const clickX = (clientX - rect.left) * (800 / rect.width);
     const clickY = (clientY - rect.top) * (400 / rect.height);
 
     if (!isAudioInitialized) isAudioInitialized = true;
 
     if (currentState === STATES.TITLE) {
-        if (clickX >= rankingButton.x && clickX <= rankingButton.x + rankingButton.width &&
-            clickY >= rankingButton.y && clickY <= rankingButton.y + rankingButton.height) {
-            currentState = STATES.RANKING_VIEW; playBgm(audioAssets.bgmTitle); return;
-        }
-        currentState = STATES.CHAR_SELECT; playBgm(audioAssets.bgmTitle);
-    } else if (currentState === STATES.RANKING_VIEW) {
-        if (clickX >= rankingBackButton.x && clickX <= rankingBackButton.x + rankingBackButton.width &&
-            clickY >= rankingBackButton.y && clickY <= rankingBackButton.y + rankingBackButton.height) {
-            currentState = STATES.TITLE;
-        }
+        if (clickX >= rankingButton.x && clickX <= rankingButton.x + rankingButton.width && clickY >= rankingButton.y && clickY <= rankingButton.y + rankingButton.height) { currentState = STATES.RANKING_VIEW; return; }
+        if (clickX >= badgeButton.x && clickX <= badgeButton.x + badgeButton.width && clickY >= badgeButton.y && clickY <= badgeButton.y + badgeButton.height) { currentState = STATES.BADGE_VIEW; return; }
+        currentState = STATES.CHAR_SELECT;
+    } else if (currentState === STATES.RANKING_VIEW || currentState === STATES.BADGE_VIEW) {
+        if (clickX >= uiBackButton.x && clickX <= uiBackButton.x + uiBackButton.width && clickY >= uiBackButton.y && clickY <= uiBackButton.y + uiBackButton.height) currentState = STATES.TITLE;
     } else if (currentState === STATES.CHAR_SELECT) {
         if (showCharPopup) {
-            if (clickX >= popupCloseBtn.x && clickX <= popupCloseBtn.x + popupCloseBtn.width &&
-                clickY >= popupCloseBtn.y && clickY <= popupCloseBtn.y + popupCloseBtn.height) {
-                showCharPopup = false;
-                playSe(audioAssets.seCookie);
-                return;
-            }
-            if (clickX >= popupSelectBtn.x && clickX <= popupSelectBtn.x + popupSelectBtn.width &&
-                clickY >= popupSelectBtn.y && clickY <= popupSelectBtn.y + popupSelectBtn.height) {
-                selectedCharKey = popupCharKey;
-                showCharPopup = false;
-                currentState = STATES.MODE_SELECT;
-                playSe(audioAssets.seJump);
-                return;
-            }
-            if (clickX < popupRect.x || clickX > popupRect.x + popupRect.width ||
-                clickY < popupRect.y || clickY > popupRect.y + popupRect.height) {
-                showCharPopup = false;
-                return;
-            }
+            if (clickX >= popupCloseBtn.x && clickX <= popupCloseBtn.x + popupCloseBtn.width && clickY >= popupCloseBtn.y && clickY <= popupCloseBtn.y + popupCloseBtn.height) { showCharPopup = false; return; }
+            if (clickX >= popupSelectBtn.x && clickX <= popupSelectBtn.x + popupSelectBtn.width && clickY >= popupSelectBtn.y && clickY <= popupSelectBtn.y + popupSelectBtn.height) { selectedCharKey = popupCharKey; showCharPopup = false; currentState = STATES.MODE_SELECT; return; }
             return;
         }
-
-        Object.keys(charButtons).forEach(key => {
-            let btn = charButtons[key];
-            if (clickX >= btn.x && clickX <= btn.x + btn.width &&
-                clickY >= btn.y && clickY <= btn.y + btn.height) {
-                popupCharKey = key;
-                showCharPopup = true;
-                playSe(audioAssets.seCookie);
+        Object.keys(charButtons).forEach(key => { let btn = charButtons[key]; if (clickX >= btn.x && clickX <= btn.x + btn.width && clickY >= btn.y && clickY <= btn.y + btn.height) { popupCharKey = key; showCharPopup = true; } });
+    } else if (currentState === STATES.MODE_SELECT) {
+        if (clickX >= modeButtons.noLife.x && clickX <= modeButtons.noLife.x + modeButtons.noLife.width && clickY >= modeButtons.noLife.y && clickY <= modeButtons.noLife.y + modeButtons.noLife.height) { isLifeMode = false; currentState = STATES.STAGE_SELECT; }
+        else if (clickX >= modeButtons.withLife.x && clickX <= modeButtons.withLife.x + modeButtons.withLife.width && clickY >= modeButtons.withLife.y && clickY <= modeButtons.withLife.y + modeButtons.withLife.height) { isLifeMode = true; currentState = STATES.STAGE_SELECT; }
+    } else if (currentState === STATES.STAGE_SELECT) { 
+        Object.keys(stageButtons).forEach(key => {
+            let btn = stageButtons[key];
+            if (clickX >= btn.x && clickX <= btn.x + btn.width && clickY >= btn.y && clickY <= btn.y + btn.height) {
+                selectedStageKey = key; initGame(); currentState = STATES.PLAY; playBgm(audioAssets.bgmPlay);
             }
         });
-    } else if (currentState === STATES.MODE_SELECT) {
-        if (clickX >= modeButtons.noLife.x && clickX <= modeButtons.noLife.x + modeButtons.noLife.width &&
-            clickY >= modeButtons.noLife.y && clickY <= modeButtons.noLife.y + modeButtons.noLife.height) {
-            isLifeMode = false; initGame(); currentState = STATES.PLAY; playBgm(audioAssets.bgmPlay);
-        } else if (clickX >= modeButtons.withLife.x && clickX <= modeButtons.withLife.x + modeButtons.withLife.width &&
-                   clickY >= modeButtons.withLife.y && clickY <= modeButtons.withLife.y + modeButtons.withLife.height) {
-            isLifeMode = true; initGame(); currentState = STATES.PLAY; playBgm(audioAssets.bgmPlay);
-        }
     } else if (currentState === STATES.PLAY) {
-        if (clickX >= pauseButton.x && clickX <= pauseButton.x + pauseButton.width &&
-            clickY >= pauseButton.y && clickY <= pauseButton.y + pauseButton.height) {
-            currentState = STATES.PAUSE; if (currentActiveBgm) currentActiveBgm.pause(); return;
-        }
+        if (clickX >= pauseButton.x && clickX <= pauseButton.x + pauseButton.width && clickY >= pauseButton.y && clickY <= pauseButton.y + pauseButton.height) { currentState = STATES.PAUSE; if (currentActiveBgm) currentActiveBgm.pause(); return; }
         triggerJumpStart(); 
-    } else if (currentState === STATES.PAUSE) {
-        currentState = STATES.PLAY; if (currentActiveBgm) currentActiveBgm.play().catch(e => {});
-    } else if (currentState === STATES.RESULT || currentState === STATES.GAMEOVER) {
-        currentState = STATES.TITLE; playBgm(audioAssets.bgmTitle);
-    }
+    } else if (currentState === STATES.PAUSE) { currentState = STATES.PLAY; if (currentActiveBgm) currentActiveBgm.play().catch(e => {}); }
+    else if (currentState === STATES.RESULT || currentState === STATES.GAMEOVER) { currentState = STATES.TITLE; playBgm(audioAssets.bgmTitle); }
 }
 
 window.addEventListener("mousedown", (e) => { handleInputStart(e.clientX, e.clientY); });
 window.addEventListener("mouseup", () => { triggerJumpEnd(); });
-
-window.addEventListener("touchstart", (e) => {
-    // 誤動作やブラウザの不要なスクロールを制御
-    if (currentState !== STATES.CHAR_SELECT && currentState !== STATES.MODE_SELECT) e.preventDefault(); 
-    if (e.touches.length > 0) handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
-}, { passive: false });
+window.addEventListener("touchstart", (e) => { if (currentState !== STATES.CHAR_SELECT && currentState !== STATES.MODE_SELECT && currentState !== STATES.STAGE_SELECT) e.preventDefault(); if (e.touches.length > 0) handleInputStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
 window.addEventListener("touchend", () => { triggerJumpEnd(); });
 
-window.addEventListener("keydown", (e) => {
-    if (!isAudioInitialized) isAudioInitialized = true;
-    if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpStart();
-});
-window.addEventListener("keyup", (e) => {
-    if (e.code === "Space" && currentState === STATES.PLAY) triggerJumpEnd();
-});
-
-let lastTime = performance.now();
-let accumulatedTime = 0;
-const deltaTimeTarget = 1000 / 60; 
-
+// 一定クロックでの挙動担保ループ
+let lastTime = performance.now(); let accumulatedTime = 0; const deltaTimeTarget = 1000 / 60; 
 function gameLoop(timestamp) {
-    let elapsed = timestamp - lastTime;
-    lastTime = timestamp;
-    if (elapsed > 100) elapsed = 100; 
-    accumulatedTime += elapsed;
-    while (accumulatedTime >= deltaTimeTarget) {
-        update();
-        accumulatedTime -= deltaTimeTarget;
-    }
-    draw();
-    requestAnimationFrame(gameLoop);
+    let elapsed = timestamp - lastTime; lastTime = timestamp; if (elapsed > 100) elapsed = 100; accumulatedTime += elapsed;
+    while (accumulatedTime >= deltaTimeTarget) { update(); accumulatedTime -= deltaTimeTarget; }
+    draw(); requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
 </script>
-
 </body>
 </html>
