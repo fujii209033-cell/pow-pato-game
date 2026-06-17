@@ -88,7 +88,8 @@ const STATES = {
     PAUSE: 'PAUSE',
     RESULT: 'RESULT',
     GAMEOVER: 'GAMEOVER',       
-    RANKING_VIEW: 'RANKING_VIEW'
+    RANKING_VIEW: 'RANKING_VIEW',
+    BADGE_VIEW: 'BADGE_VIEW' // ①バッジ図鑑の状態を追加
 };
 let currentState = STATES.TITLE;
 
@@ -226,6 +227,7 @@ let dashPanelTimer = 0;
 // --- ボタンの配置定義 ---
 const pauseButton = { x: 730, y: 15, width: 50, height: 50 };
 const rankingButton = { x: 30, y: 330, width: 160, height: 45 };
+const badgeButton = { x: 610, y: 330, width: 160, height: 45 }; // ①バッジ図鑑ボタン
 const rankingBackButton = { x: 320, y: 320, width: 160, height: 50 };
 
 const charButtons = {
@@ -263,18 +265,30 @@ btnImgWithLife.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
 
 // --- 画像アセット ---
 const imgAssets = { chars: {}, items: {}, obstacles: {} };
+
+// 各画像の読み込み完了チェック用
+let loadedImagesCount = 0;
+let totalImagesCount = 0;
+function onImageLoad() { loadedImagesCount++; }
+
 Object.keys(CHARACTER_CONFIG).forEach(charKey => {
     imgAssets.chars[charKey] = {};
     Object.keys(CHARACTER_CONFIG[charKey].images).forEach(imgKey => {
+        totalImagesCount++;
         imgAssets.chars[charKey][imgKey] = new Image();
+        imgAssets.chars[charKey][imgKey].onload = onImageLoad;
         imgAssets.chars[charKey][imgKey].src = CHARACTER_CONFIG[charKey].images[imgKey];
     });
 });
 
-imgAssets.items.cookie = new Image();
-imgAssets.items.cookie.src = "images/cookie.png";
-imgAssets.items.bone = new Image();            
-imgAssets.items.bone.src = "images/bone.png";
+totalImagesCount += 3;
+imgAssets.items.cookie = new Image(); imgAssets.items.cookie.onload = onImageLoad; imgAssets.items.cookie.src = "images/cookie.png";
+imgAssets.items.bone = new Image(); imgAssets.items.bone.onload = onImageLoad; imgAssets.items.bone.src = "images/bone.png";
+imgAssets.items.rockyShield = new Image(); imgAssets.items.rockyShield.onload = onImageLoad; imgAssets.items.rockyShield.src = "images/rocky_shield.png";
+
+// バッジ図鑑用の画像
+imgAssets.items.badge = new Image();
+imgAssets.items.badge.src = "images/badge.png";
 
 // ゴールのパウステーションアセット（画像読み込み失敗時のために高解像度SVGを内包）
 imgAssets.items.pawStation = new Image();
@@ -291,13 +305,9 @@ imgAssets.items.pawStation.src = "data:image/svg+xml;charset=utf-8," + encodeURI
 </svg>
 `);
 
-// 予備の画像読み込みハンドラ
 const realPawStationImg = new Image();
 realPawStationImg.src = "images/paw_station.png";
 realPawStationImg.onload = () => { imgAssets.items.pawStation = realPawStationImg; };
-
-imgAssets.items.rockyShield = new Image();
-imgAssets.items.rockyShield.src = "images/rocky_shield.png";
 
 imgAssets.items.spring = new Image();
 imgAssets.items.spring.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`
@@ -330,7 +340,9 @@ imgAssets.obstacles.bird.src = "data:image/svg+xml;charset=utf-8," + encodeURICo
 
 const obstacleImages = { car: "images/car.png", moving_car: "images/car.png", box: "images/box.png", cone: "images/cone.png", cat: "images/cat.png", puddle: "images/puddle.png" };
 Object.keys(obstacleImages).forEach(key => {
+    totalImagesCount++;
     imgAssets.obstacles[key] = new Image();
+    imgAssets.obstacles[key].onload = onImageLoad;
     imgAssets.obstacles[key].src = obstacleImages[key];
 });
 
@@ -856,6 +868,8 @@ function draw() {
         drawModeSelectScreen();
     } else if (currentState === STATES.RANKING_VIEW) {
         drawRankingScreen();
+    } else if (currentState === STATES.BADGE_VIEW) {
+        drawBadgeScreen(); // ①バッジ図鑑画面
     } else {
         drawGamePlayPlayfields();
     }
@@ -906,6 +920,10 @@ function drawTitleScreen() {
     // ランキングボタン
     ctx.fillStyle = "#4F46E5"; ctx.beginPath(); ctx.roundRect(rankingButton.x, rankingButton.y, rankingButton.width, rankingButton.height, 12); ctx.fill();
     ctx.fillStyle = "#FFF"; ctx.font = "bold 16px sans-serif"; ctx.fillText("🏆 ランキング", rankingButton.x + 80, rankingButton.y + 28);
+
+    // ① バッジ図鑑ボタン
+    ctx.fillStyle = "#F59E0B"; ctx.beginPath(); ctx.roundRect(badgeButton.x, badgeButton.y, badgeButton.width, badgeButton.height, 12); ctx.fill();
+    ctx.fillStyle = "#FFF"; ctx.font = "bold 16px sans-serif"; ctx.fillText("🏅 バッジずかん", badgeButton.x + 80, badgeButton.y + 28);
 }
 
 function drawCharSelectScreen() {
@@ -929,9 +947,15 @@ function drawCharSelectScreen() {
         ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 16px sans-serif";
         ctx.fillText(cfg.name, btn.x + btn.width / 2, btn.y + 32);
 
-        // キャライラスト表示エリアの補完描画（絵文字・アセット統合表現）
-        ctx.font = "44px sans-serif";
-        ctx.fillText(cfg.emoji, btn.x + btn.width / 2, btn.y + 88);
+        // ② キャラクター選択画面：画像のロード判定と描画処理
+        let img = imgAssets.chars[key].run1;
+        if (img && img.complete && img.naturalWidth !== 0) {
+            ctx.drawImage(img, btn.x + btn.width / 2 - 25, btn.y + 50, 50, 50);
+        } else {
+            // 画像がない場合の綺麗なフォールバック表示
+            ctx.font = "44px sans-serif";
+            ctx.fillText(cfg.emoji, btn.x + btn.width / 2, btn.y + 88);
+        }
     });
 
     // 詳細スキルポップアップ
@@ -946,6 +970,12 @@ function drawCharSelectScreen() {
         
         ctx.fillStyle = "#FFFFFF"; ctx.font = "bold 22px sans-serif";
         ctx.fillText(pCfg.name, popupRect.x + popupRect.width / 2, popupRect.y + 61);
+
+        // ポップアップ内の大型キャラ画像描画
+        let pImg = imgAssets.chars[popupCharKey].jump;
+        if (pImg && pImg.complete && pImg.naturalWidth !== 0) {
+            ctx.drawImage(pImg, popupRect.x + popupRect.width - 130, popupRect.y + 100, 90, 90);
+        }
 
         // スキル詳細
         ctx.fillStyle = "#1E293B"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "left";
@@ -987,6 +1017,30 @@ function drawRankingScreen() {
         ctx.fillText(`だい ${i + 1} い： ${val} コッシー`, 400, 130 + i * 35);
     }
 
+    ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(rankingBackButton.x, rankingBackButton.y, rankingBackButton.width, rankingBackButton.height, 12); ctx.fill();
+    ctx.fillStyle = "#FFF"; ctx.font = "bold 18px sans-serif"; ctx.fillText("もどる", rankingBackButton.x + 80, rankingBackButton.y + 32);
+}
+
+// ① バッジ図鑑画面の描画処理
+function drawBadgeScreen() {
+    ctx.fillStyle = "#1E293B"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("🏅 パウバッジコレクション 🏅", 400, 60);
+
+    // バッジ画像の表示
+    let bImg = imgAssets.items.badge;
+    if (bImg && bImg.complete && bImg.naturalWidth !== 0) {
+        ctx.drawImage(bImg, 400 - 60, 100, 120, 120);
+    } else {
+        // フォールバック用の図形バッジ
+        ctx.fillStyle = "#F59E0B"; ctx.beginPath(); ctx.arc(400, 160, 50, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#FFF"; ctx.lineWidth = 4; ctx.stroke();
+        ctx.fillStyle = "#FFF"; ctx.font = "bold 40px sans-serif"; ctx.fillText("🏅", 400, 175);
+    }
+
+    ctx.fillStyle = "#475569"; ctx.font = "bold 18px sans-serif";
+    ctx.fillText("ゲームをクリアして たくさんバッジをあつめよう！", 400, 260);
+
+    // もどるボタン
     ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.roundRect(rankingBackButton.x, rankingBackButton.y, rankingBackButton.width, rankingBackButton.height, 12); ctx.fill();
     ctx.fillStyle = "#FFF"; ctx.font = "bold 18px sans-serif"; ctx.fillText("もどる", rankingBackButton.x + 80, rankingBackButton.y + 32);
 }
@@ -1061,53 +1115,67 @@ function drawGamePlayPlayfields() {
         }
     });
 
-    // クッキー
+    // ③ クッキー画像の表示対応
     cookies.forEach(cookie => {
         if (!cookie.collected) {
             let cx = cookie.x - cameraX;
             if (cx > -30 && cx < 800) {
-                // クッキーのフォールバック丸描画（画像未ロード時）
-                ctx.fillStyle = "#D97706"; ctx.beginPath(); ctx.arc(cx + 15, cookie.y + 15, 13, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = "#FEF08A"; ctx.beginPath(); ctx.arc(cx + 15, cookie.y + 15, 10, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = "#78350F"; ctx.fillRect(cx + 9, cookie.y + 10, 3, 3); ctx.fillRect(cx + 17, cookie.y + 14, 3, 3); ctx.fillRect(cx + 12, cookie.y + 20, 3, 3);
+                let cImg = imgAssets.items.cookie;
+                if (cImg && cImg.complete && cImg.naturalWidth !== 0) {
+                    ctx.drawImage(cImg, cx, cookie.y, cookie.width, cookie.height);
+                } else {
+                    // フォールバック丸描画（画像未ロード時）
+                    ctx.fillStyle = "#D97706"; ctx.beginPath(); ctx.arc(cx + 15, cookie.y + 15, 13, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "#FEF08A"; ctx.beginPath(); ctx.arc(cx + 15, cookie.y + 15, 10, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "#78350F"; ctx.fillRect(cx + 9, cookie.y + 10, 3, 3); ctx.fillRect(cx + 17, cookie.y + 14, 3, 3); ctx.fillRect(cx + 12, cookie.y + 20, 3, 3);
+                }
             }
         }
     });
 
-    // ホネ
+    // ③ ホネ画像の表示対応
     bones.forEach(bone => {
         if (!bone.collected) {
             let bx = bone.x - cameraX;
             if (bx > -40 && bx < 800) {
-                ctx.fillStyle = "#FFFFFF"; ctx.beginPath();
-                ctx.roundRect(bx + 6, bone.y + 12, 22, 10, 4); ctx.fill();
-                ctx.arc(bx + 7, bone.y + 11, 6, 0, Math.PI * 2); ctx.arc(bx + 7, bone.y + 23, 6, 0, Math.PI * 2);
-                ctx.arc(bx + 27, bone.y + 11, 6, 0, Math.PI * 2); ctx.arc(bx + 27, bone.y + 23, 6, 0, Math.PI * 2);
-                ctx.fill();
+                let bImg = imgAssets.items.bone;
+                if (bImg && bImg.complete && bImg.naturalWidth !== 0) {
+                    ctx.drawImage(bImg, bx, bone.y, bone.width, bone.height);
+                } else {
+                    ctx.fillStyle = "#FFFFFF"; ctx.beginPath();
+                    ctx.roundRect(bx + 6, bone.y + 12, 22, 10, 4); ctx.fill();
+                    ctx.arc(bx + 7, bone.y + 11, 6, 0, Math.PI * 2); ctx.arc(bx + 7, bone.y + 23, 6, 0, Math.PI * 2);
+                    ctx.arc(bx + 27, bone.y + 11, 6, 0, Math.PI * 2); ctx.arc(bx + 27, bone.y + 23, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
         }
     });
 
-    // シールド
+    // ③ シールド画像の表示対応
     shieldItems.forEach(shield => {
         if (!shield.collected) {
             let sx = shield.x - cameraX;
             if (sx > -40 && sx < 800) {
-                ctx.fillStyle = "#10B981"; ctx.beginPath();
-                ctx.moveTo(sx + 20, shield.y); ctx.lineTo(sx + 40, shield.y + 10); ctx.lineTo(sx + 32, shield.y + 32); ctx.lineTo(sx + 20, shield.y + 40); ctx.lineTo(sx + 8, shield.y + 32); ctx.lineTo(sx, shield.y + 10); Z
-                ctx.fill(); ctx.strokeStyle = "#FFF"; ctx.lineWidth = 2; ctx.stroke();
+                let sImg = imgAssets.items.rockyShield;
+                if (sImg && sImg.complete && sImg.naturalWidth !== 0) {
+                    ctx.drawImage(sImg, sx, shield.y, shield.width, shield.height);
+                } else {
+                    ctx.fillStyle = "#10B981"; ctx.beginPath();
+                    ctx.moveTo(sx + 20, shield.y); ctx.lineTo(sx + 40, shield.y + 10); ctx.lineTo(sx + 32, shield.y + 32); ctx.lineTo(sx + 20, shield.y + 40); ctx.lineTo(sx + 8, shield.y + 32); ctx.lineTo(sx, shield.y + 10);
+                    ctx.fill(); ctx.strokeStyle = "#FFF"; ctx.lineWidth = 2; ctx.stroke();
+                }
             }
         }
     });
 
-    // 障害物群のレンダリング（落とし穴含む）
+    // ③ 障害物群の画像表示対応（落とし穴含む）
     obstacles.forEach(obs => {
         if (!obs.active) return;
         let ox = obs.x - cameraX;
         if (ox < -150 || ox > 850) return;
 
         if (obs.type === 'pit') {
-            // 自然な落とし穴表現（グラデーションによる深み）
             let pitGrad = ctx.createLinearGradient(ox, obs.y + 5, ox, obs.y + obs.height);
             pitGrad.addColorStop(0, "#1E293B"); pitGrad.addColorStop(0.3, "#0F172A"); pitGrad.addColorStop(1, "#000000");
             ctx.fillStyle = pitGrad;
@@ -1118,26 +1186,34 @@ function drawGamePlayPlayfields() {
             ctx.fillStyle = "#000";
             ctx.fillRect(ox + 8, obs.y + 18, obs.width - 16, obs.height);
         } else if (obs.type === 'puddle') {
-            let pudGrad = ctx.createLinearGradient(ox, obs.y, ox, obs.y + obs.height);
-            pudGrad.addColorStop(0, "#3B82F6"); pudGrad.addColorStop(1, "#1D4ED8");
-            ctx.fillStyle = pudGrad; ctx.beginPath(); ctx.roundRect(ox, obs.y, obs.width, obs.height, 6); ctx.fill();
+            let oImg = imgAssets.obstacles[obs.type];
+            if (oImg && oImg.complete && oImg.naturalWidth !== 0) {
+                ctx.drawImage(oImg, ox, obs.y, obs.width, obs.height);
+            } else {
+                let pudGrad = ctx.createLinearGradient(ox, obs.y, ox, obs.y + obs.height);
+                pudGrad.addColorStop(0, "#3B82F6"); pudGrad.addColorStop(1, "#1D4ED8");
+                ctx.fillStyle = pudGrad; ctx.beginPath(); ctx.roundRect(ox, obs.y, obs.width, obs.height, 6); ctx.fill();
+            }
         } else if (obs.type === 'spring') {
             ctx.drawImage(imgAssets.items.spring, ox, obs.y, obs.width, obs.height);
         } else if (obs.type === 'bird') {
             ctx.drawImage(imgAssets.obstacles.bird, ox, obs.y, obs.width, obs.height);
-        } else if (obs.type === 'box') {
-            ctx.fillStyle = "#D97706"; ctx.fillRect(ox, obs.y, obs.width, obs.height);
-            ctx.strokeStyle = "#78350F"; ctx.lineWidth = 3; ctx.strokeRect(ox + 4, obs.y + 4, obs.width - 8, obs.height - 8);
-            ctx.beginPath(); ctx.moveTo(ox, obs.y); ctx.lineTo(ox + obs.width, obs.y + obs.height); ctx.stroke();
-        } else if (obs.type === 'cone') {
-            ctx.fillStyle = "#F97316"; ctx.beginPath(); ctx.moveTo(ox + obs.width / 2, obs.y); ctx.lineTo(ox + obs.width, obs.y + obs.height - 6); ctx.lineTo(ox, obs.y + obs.height - 6); ctx.fill();
-            ctx.fillStyle = "#FFF"; ctx.fillRect(ox + obs.width * 0.25, obs.y + obs.height * 0.4, obs.width * 0.5, obs.height * 0.2);
-            ctx.fillStyle = "#F97316"; ctx.fillRect(ox, obs.y + obs.height - 6, obs.width, 6);
         } else {
-            // パトカーなどの汎用代替ビジュアル
-            ctx.fillStyle = "#DC2626"; ctx.fillRect(ox, obs.y, obs.width, obs.height);
-            ctx.fillStyle = "#9BF"; ctx.fillRect(ox + obs.width * 0.5, obs.y + 4, obs.width * 0.4, obs.height * 0.4);
-            ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(ox + 15, obs.y + obs.height, 10, 0, Math.PI * 2); ctx.arc(ox + obs.width - 15, obs.y + obs.height, 10, 0, Math.PI * 2); ctx.fill();
+            // car, moving_car, box, cone, cat などのフォルダ画像読み込み
+            let oImg = imgAssets.obstacles[obs.type];
+            if (oImg && oImg.complete && oImg.naturalWidth !== 0) {
+                ctx.drawImage(oImg, ox, obs.y, obs.width, obs.height);
+            } else {
+                // 代替図形表現
+                if (obs.type === 'box') {
+                    ctx.fillStyle = "#D97706"; ctx.fillRect(ox, obs.y, obs.width, obs.height);
+                    ctx.strokeStyle = "#78350F"; ctx.lineWidth = 3; ctx.strokeRect(ox + 4, obs.y + 4, obs.width - 8, obs.height - 8);
+                } else if (obs.type === 'cone') {
+                    ctx.fillStyle = "#F97316"; ctx.beginPath(); ctx.moveTo(ox + obs.width / 2, obs.y); ctx.lineTo(ox + obs.width, obs.y + obs.height - 6); ctx.lineTo(ox, obs.y + obs.height - 6); ctx.fill();
+                } else {
+                    ctx.fillStyle = "#DC2626"; ctx.fillRect(ox, obs.y, obs.width, obs.height);
+                }
+            }
         }
     });
 
@@ -1146,8 +1222,13 @@ function drawGamePlayPlayfields() {
         ctx.save();
         ctx.translate(fo.x - cameraX + fo.width / 2, fo.y + fo.height / 2);
         ctx.rotate(fo.rotation);
-        ctx.fillStyle = "rgba(220, 38, 38, 0.6)";
-        ctx.fillRect(-fo.width / 2, -fo.height / 2, fo.width, fo.height);
+        let oImg = imgAssets.obstacles[fo.type];
+        if (oImg && oImg.complete && oImg.naturalWidth !== 0) {
+            ctx.drawImage(oImg, -fo.width / 2, -fo.height / 2, fo.width, fo.height);
+        } else {
+            ctx.fillStyle = "rgba(220, 38, 38, 0.6)";
+            ctx.fillRect(-fo.width / 2, -fo.height / 2, fo.width, fo.height);
+        }
         ctx.restore();
     });
 
@@ -1156,32 +1237,46 @@ function drawGamePlayPlayfields() {
         ctx.save();
         ctx.translate(dc.x - cameraX, dc.y);
         ctx.rotate(dc.rotation);
-        ctx.fillStyle = "#D97706"; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+        let cImg = imgAssets.items.cookie;
+        if (cImg && cImg.complete && cImg.naturalWidth !== 0) {
+            ctx.drawImage(cImg, -15, -15, 30, 30);
+        } else {
+            ctx.fillStyle = "#D97706"; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+        }
         ctx.restore();
     });
 
-    // ゴール：パウステーションの確実な描画
+    // ゴール：パウステーション
     let goalDrawX = goalX - cameraX;
     if (goalDrawX < 850) {
         ctx.drawImage(imgAssets.items.pawStation, goalDrawX, BASE_GROUND_Y - 160, 200, 260);
     }
 
-    // プレイヤーキャラクターのレンダリング
+    // ③ プレイヤーキャラクターの画像表示対応
     ctx.save();
     let pAnimY = player.y + 50; 
     if (player.invincibleTimer > 0 && Math.floor(gameFrame / 4) % 2 === 0) {
         ctx.globalAlpha = 0.3;
     }
 
-    // キャラクター代替ポリゴン・ビジュアル（カラー連動）
-    ctx.fillStyle = CHARACTER_CONFIG[selectedCharKey].color;
-    ctx.beginPath();
-    ctx.roundRect(player.x - cameraX, pAnimY, player.width, player.height, 14);
-    ctx.fill();
+    // 走るアニメーション画像キーの決定
+    let pImgKey = "run1";
+    if (player.isJumping) {
+        pImgKey = "jump";
+    } else {
+        pImgKey = (Math.floor(gameFrame / 8) % 2 === 0) ? "run1" : "run2";
+    }
 
-    // 目の描画
-    ctx.fillStyle = "#FFF"; ctx.fillRect(player.x - cameraX + player.width - 18, pAnimY + 12, 10, 12);
-    ctx.fillStyle = "#000"; ctx.fillRect(player.x - cameraX + player.width - 12, pAnimY + 15, 5, 6);
+    let pImg = imgAssets.chars[selectedCharKey][pImgKey];
+    if (pImg && pImg.complete && pImg.naturalWidth !== 0) {
+        ctx.drawImage(pImg, player.x - cameraX, pAnimY, player.width, player.height);
+    } else {
+        // 画像未ロード時のフォールバックポリゴン（カラー連動）
+        ctx.fillStyle = CHARACTER_CONFIG[selectedCharKey].color;
+        ctx.beginPath(); ctx.roundRect(player.x - cameraX, pAnimY, player.width, player.height, 14); ctx.fill();
+        ctx.fillStyle = "#FFF"; ctx.fillRect(player.x - cameraX + player.width - 18, pAnimY + 12, 10, 12);
+        ctx.fillStyle = "#000"; ctx.fillRect(player.x - cameraX + player.width - 12, pAnimY + 15, 5, 6);
+    }
 
     // ロッキーのバリアエフェクト
     if (hasRockyShield) {
@@ -1255,7 +1350,6 @@ function drawGamePlayPlayfields() {
 
 // --- 入力制御ロジック群 ---
 function handleInputStart(clientX, clientY) {
-    // キャンバス上の実座標に逆換算
     const rect = canvas.getBoundingClientRect();
     const scaleX = 800 / rect.width;
     const scaleY = 400 / rect.height;
@@ -1268,15 +1362,23 @@ function handleInputStart(clientX, clientY) {
     }
 
     if (currentState === STATES.TITLE) {
+        // ランキングボタンクリック判定
         if (touchX >= rankingButton.x && touchX <= rankingButton.x + rankingButton.width &&
             touchY >= rankingButton.y && touchY <= rankingButton.y + rankingButton.height) {
             currentState = STATES.RANKING_VIEW;
             return;
         }
+        // ① バッジ図鑑ボタンクリック判定
+        if (touchX >= badgeButton.x && touchX <= badgeButton.x + badgeButton.width &&
+            touchY >= badgeButton.y && touchY <= badgeButton.y + badgeButton.height) {
+            currentState = STATES.BADGE_VIEW;
+            return;
+        }
         currentState = STATES.CHAR_SELECT;
         showCharPopup = false;
     } 
-    else if (currentState === STATES.RANKING_VIEW) {
+    else if (currentState === STATES.RANKING_VIEW || currentState === STATES.BADGE_VIEW) {
+        // 各種裏画面の「もどる」ボタン判定
         if (touchX >= rankingBackButton.x && touchX <= rankingBackButton.x + rankingBackButton.width &&
             touchY >= rankingBackButton.y && touchY <= rankingBackButton.y + rankingBackButton.height) {
             currentState = STATES.TITLE;
@@ -1344,7 +1446,6 @@ function triggerJumpStart() {
         jumpCounter = 0;
         playSe(audioAssets.seJump);
     } else {
-        // スカイ特有スキル：空中で再タップ・長押しするとフライング
         if (selectedCharKey === 'skye' && !isHovering) {
             isHovering = true;
             hoverTimer = 75; 
